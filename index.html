@@ -1453,9 +1453,12 @@ async function geocodeAddress(address){
       }
       const geocoder=new google.maps.Geocoder();
       geocoder.geocode({address},(results,status)=>{
+        console.log('Geocode status:',status,'results:',results);
         if(status==='OK'&&results[0]){
           const loc=results[0].geometry.location;
-          resolve({lat:loc.lat(),lng:loc.lng(),formattedAddress:results[0].formatted_address});
+          const out={lat:loc.lat(),lng:loc.lng(),formattedAddress:results[0].formatted_address};
+          console.log('Geocode success:',out);
+          resolve(out);
         } else {
           console.warn('Geocode failed:',status);
           resolve(null);
@@ -1467,6 +1470,25 @@ async function geocodeAddress(address){
     }
   });
 }
+
+P.geocodeCustomer=async function(i){
+  const c=settings.customers[i];if(!c)return;
+  console.log('Geocoding customer:',c.name,'address:',c.address);
+  toast('Geocoding...','#1E40AF');
+  const result=await geocodeAddress(c.address);
+  console.log('Geocode result:',result);
+  if(result){
+    settings.customers[i].lat=result.lat;
+    settings.customers[i].lng=result.lng;
+    settings.customers[i].formattedAddress=result.formattedAddress;
+    console.log('Saving customer with coords:',settings.customers[i]);
+    await saveSettings();
+    toast(`✓ ${c.name} geocoded!`);
+    P.renderAddressBook();
+  } else {
+    toast('Geocoding failed — check the address','#991B1B');
+  }
+};
 
 // ── K-MEANS CLUSTERING ────────────────────────────────────
 function kMeansCluster(stops,k){
@@ -1757,21 +1779,6 @@ P.removeCustomer=async function(i){
   await saveSettings();P.renderAddressBook();
 };
 
-P.geocodeCustomer=async function(i){
-  const c=settings.customers[i];if(!c)return;
-  toast('Geocoding...','#1E40AF');
-  const result=await geocodeAddress(c.address);
-  if(result){
-    settings.customers[i].lat=result.lat;
-    settings.customers[i].lng=result.lng;
-    settings.customers[i].formattedAddress=result.formattedAddress;
-    await saveSettings();
-    toast(`✓ ${c.name} geocoded!`);
-    P.renderAddressBook();
-  } else {
-    toast('Geocoding failed — check the address','#991B1B');
-  }
-};
 
 function findCustomerAddress(name){
   if(!name||!settings.customers)return null;
