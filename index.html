@@ -125,6 +125,7 @@
     .cal-event.gus{background:#DBEAFE;color:#1E40AF;}
     .cal-event.jc{background:#D1FAE5;color:#065F46;}
     .cal-event.sergio{background:#FEF3C7;color:#92400E;}
+    .cal-event.unassigned{background:#FEE2E2;color:#991B1B;border:1px dashed #FCA5A5;}
 
     /* SETTINGS */
     .settings-section{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:18px 20px;margin-bottom:16px;}
@@ -145,7 +146,7 @@
     @keyframes slideIn{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}
 
     /* METRICS */
-    .metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+    .metric-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;}
     .metric-card{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:14px 16px;}
     .metric-label{font-size:11px;color:#666;margin-bottom:4px;}
     .metric-val{font-size:24px;font-weight:600;}
@@ -229,11 +230,12 @@
       <div class="sidebar-item active" onclick="showPage('home')" data-page="home"><span class="icon">🏠</span>Home</div>
       <div class="sidebar-section">Operations</div>
       <div class="sidebar-item" onclick="showPage('order-entry')" data-page="order-entry"><span class="icon">➕</span>New Order</div>
-      <div class="sidebar-item" onclick="showPage('order-log')" data-page="order-log"><span class="icon">📋</span>Order Log</div>
       <div class="sidebar-item" onclick="showPage('saw-cutting')" data-page="saw-cutting"><span class="icon">⚙️</span>Saw Cutting</div>
+      <div class="sidebar-item" onclick="showPage('warehouse')" data-page="warehouse"><span class="icon">🏭</span>Warehouse Routing</div>
       <div class="sidebar-item" onclick="showPage('shipments')" data-page="shipments"><span class="icon">📦</span>Shipments</div>
       <div class="sidebar-item" onclick="showPage('bt-calendar')" data-page="bt-calendar"><span class="icon">🚛</span>BT Calendar</div>
       <div class="sidebar-section">Insights</div>
+      <div class="sidebar-item" onclick="showPage('order-dashboard')" data-page="order-dashboard"><span class="icon">🗂️</span>Order Dashboard</div>
       <div class="sidebar-item" onclick="showPage('activity')" data-page="activity"><span class="icon">📈</span>Activity</div>
     </div>
 
@@ -254,16 +256,16 @@
             <div class="launcher-desc">Enter a new order — automatically routes to cutting, shipments, and delivery</div>
             <span class="launcher-badge badge-live">Live</span>
           </div>
-          <div class="launcher-card" onclick="showPage('order-log')">
-            <div class="launcher-icon">📋</div>
-            <div class="launcher-title">Order Log</div>
-            <div class="launcher-desc">Live order dashboard replacing the O365 workbook</div>
-            <span class="launcher-badge badge-live">Live</span>
-          </div>
           <div class="launcher-card" onclick="showPage('saw-cutting')">
             <div class="launcher-icon">⚙️</div>
             <div class="launcher-title">Saw Cutting</div>
             <div class="launcher-desc">Cutting queue — auto-populated when orders have cutting = Y</div>
+            <span class="launcher-badge badge-live">Live</span>
+          </div>
+          <div class="launcher-card" onclick="showPage('warehouse')">
+            <div class="launcher-icon">🏭</div>
+            <div class="launcher-title">Warehouse Routing</div>
+            <div class="launcher-desc">Admin assigns front warehouse, routed 12', routed back, and comments</div>
             <span class="launcher-badge badge-live">Live</span>
           </div>
           <div class="launcher-card" onclick="showPage('shipments')">
@@ -282,6 +284,12 @@
             <div class="launcher-icon">📈</div>
             <div class="launcher-title">Activity Dashboard</div>
             <div class="launcher-desc">Productivity metrics, actual vs estimated cut times</div>
+            <span class="launcher-badge badge-live">Live</span>
+          </div>
+          <div class="launcher-card" onclick="showPage('order-dashboard')">
+            <div class="launcher-icon">🗂️</div>
+            <div class="launcher-title">Order Dashboard</div>
+            <div class="launcher-desc">Sales snapshot — all orders with routing status in one view</div>
             <span class="launcher-badge badge-live">Live</span>
           </div>
         </div>
@@ -357,50 +365,20 @@
           </div>
         </div>
 
-        <div class="form-card">
-          <div class="form-card-title">Warehouse routing</div>
-          <div class="form-grid four">
-            <div>
-              <label class="field-label">Front Warehouse</label>
-              <input type="text" id="oe-front" placeholder="e.g. ELROY">
-            </div>
-            <div>
-              <label class="field-label">Back Warehouse</label>
-              <input type="text" id="oe-back" placeholder="Optional">
-            </div>
-            <div>
-              <label class="field-label">Routed 12'</label>
-              <input type="text" id="oe-routed12" placeholder="Initials">
-            </div>
-            <div>
-              <label class="field-label">Routed Back</label>
-              <input type="text" id="oe-routedback" placeholder="Initials">
-            </div>
-            <div>
-              <label class="field-label">Assigned To</label>
-              <input type="text" id="oe-assigned" placeholder="Initials">
-            </div>
-            <div class="span3">
-              <label class="field-label">Comments</label>
-              <input type="text" id="oe-comments" placeholder="Any additional notes...">
-            </div>
-          </div>
-        </div>
-
         <!-- ROUTING BANNERS -->
         <div id="banner-cutting" class="routing-banner cutting" style="display:none;">
           ⚙️ <strong>Cutting required</strong> — this order will be automatically added to the Saw Cutting queue
         </div>
         <div id="banner-bt" class="routing-banner bt" style="display:none;">
-          🚛 <strong>BT delivery</strong> — this order will appear on the BT Delivery Calendar
+          🚛 <strong>BT delivery</strong> — this will be added to the BT Calendar for admin to assign a truck
           <div style="margin-top:8px;display:flex;gap:10px;flex-wrap:wrap;">
             <div>
-              <label class="field-label">Truck</label>
-              <select id="oe-truck" style="min-width:100px;"></select>
+              <label class="field-label">City / Destination</label>
+              <input type="text" id="oe-city" placeholder="City or vendor location" style="min-width:180px;">
             </div>
             <div>
-              <label class="field-label">Delivery City</label>
-              <input type="text" id="oe-city" placeholder="City" style="min-width:140px;">
+              <label class="field-label">PO # / SO #</label>
+              <input type="text" id="oe-bt-ref" placeholder="PO or SO number" style="min-width:150px;">
             </div>
           </div>
         </div>
@@ -413,42 +391,6 @@
           <button class="btn" onclick="clearOrderForm()">Clear</button>
         </div>
         <div id="oe-msg" style="font-size:12px;margin-top:8px;min-height:16px;"></div>
-      </div>
-
-      <!-- ORDER LOG -->
-      <div id="page-order-log" class="page" style="display:none;">
-        <div class="section-header">
-          <h2>Order Log</h2>
-          <p>All active orders — auto-archives after ship date passes</p>
-        </div>
-        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
-          <input type="text" id="ol-search" placeholder="🔍 Search SO#, customer, SP..." style="max-width:260px;" oninput="renderOrderLog()">
-          <select id="ol-sp-filter" onchange="renderOrderLog()" style="width:auto;">
-            <option value="">All SPs</option>
-          </select>
-          <select id="ol-status-filter" onchange="renderOrderLog()" style="width:auto;">
-            <option value="">All statuses</option>
-            <option>Entered</option>
-            <option>Cutting</option>
-            <option>Ready</option>
-            <option>Shipped</option>
-            <option>Invoiced</option>
-          </select>
-          <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#666;cursor:pointer;">
-            <input type="checkbox" id="ol-show-archive" onchange="renderOrderLog()" style="accent-color:#0f3460;"> Show archived
-          </label>
-          <button class="btn" style="margin-left:auto;font-size:12px;" onclick="exportOrderLog()">⬇ Export CSV</button>
-        </div>
-        <div style="overflow-x:auto;">
-          <table class="order-table">
-            <thead>
-              <tr>
-                <th>SO #</th><th>Customer</th><th>SP</th><th>Entry</th><th>Ship Date</th><th>Via</th><th>Wt</th><th>Lines</th><th>Risk</th><th>Cutting</th><th>Status</th><th>Comments</th><th></th>
-              </tr>
-            </thead>
-            <tbody id="order-log-body"></tbody>
-          </table>
-        </div>
       </div>
 
       <!-- SAW CUTTING -->
@@ -464,6 +406,23 @@
           <button class="btn btn-primary" onclick="window.open('https://nicoleacarranza1203.github.io/saw-backlog-app/','_blank')">Open Saw Cutting App ↗</button>
           <div style="font-size:11px;color:#999;margin-top:12px;">Opens in a new tab — orders submitted here appear automatically</div>
         </div>
+      </div>
+
+      <!-- WAREHOUSE ROUTING -->
+      <div id="page-warehouse" class="page" style="display:none;">
+        <div class="section-header">
+          <h2>Warehouse Routing</h2>
+          <p>Admin assigns warehouse routing details to orders after entry</p>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+          <input type="text" id="wr-search" placeholder="🔍 Search SO#, customer..." style="max-width:260px;" oninput="window.renderWarehouse()">
+          <select id="wr-filter" onchange="window.renderWarehouse()" style="width:auto;">
+            <option value="unrouted">Needs routing</option>
+            <option value="routed">Routed</option>
+            <option value="all">All orders</option>
+          </select>
+        </div>
+        <div id="warehouse-list"></div>
       </div>
 
       <!-- SHIPMENTS -->
@@ -498,6 +457,7 @@
             <button class="btn" onclick="calNext()">Next →</button>
           </div>
           <div style="display:flex;gap:6px;align-items:center;font-size:12px;">
+            <span style="background:#FEE2E2;color:#991B1B;padding:2px 8px;border-radius:4px;border:1px dashed #FCA5A5;">⚠ Unassigned</span>
             <span style="background:#DBEAFE;color:#1E40AF;padding:2px 8px;border-radius:4px;">Gus</span>
             <span style="background:#D1FAE5;color:#065F46;padding:2px 8px;border-radius:4px;">JC</span>
             <span style="background:#FEF3C7;color:#92400E;padding:2px 8px;border-radius:4px;">Sergio</span>
@@ -505,6 +465,62 @@
           <button class="btn btn-primary" style="font-size:12px;" onclick="openAddDelivery()">+ Add delivery</button>
         </div>
         <div class="cal-grid" id="cal-grid"></div>
+      </div>
+
+      <!-- ORDER DASHBOARD -->
+      <div id="page-order-dashboard" class="page" style="display:none;">
+        <div class="section-header">
+          <h2>Order Dashboard</h2>
+          <p>All orders with warehouse routing status — most recent first</p>
+        </div>
+        <!-- Filters -->
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+          <input type="text" id="od-search" placeholder="🔍 Search SO#, customer, SP..." style="max-width:260px;" oninput="window.renderOrderDashboard()">
+          <select id="od-sp" onchange="window.renderOrderDashboard()" style="width:auto;">
+            <option value="">All SPs</option>
+          </select>
+          <select id="od-routing" onchange="window.renderOrderDashboard()" style="width:auto;">
+            <option value="">All routing statuses</option>
+            <option value="routed">Routed ✓</option>
+            <option value="unrouted">Needs routing</option>
+          </select>
+          <select id="od-via" onchange="window.renderOrderDashboard()" style="width:auto;">
+            <option value="">All Via</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#666;cursor:pointer;">
+            <input type="checkbox" id="od-archived" onchange="window.renderOrderDashboard()" style="accent-color:#0f3460;"> Include archived
+          </label>
+          <span id="od-count" style="font-size:12px;color:#999;margin-left:auto;"></span>
+        </div>
+        <!-- Table -->
+        <div style="overflow-x:auto;">
+          <table class="order-table" id="od-table">
+            <thead>
+              <tr>
+                <th>SO #</th>
+                <th>Customer</th>
+                <th>SP</th>
+                <th>Entry</th>
+                <th>Ship Date</th>
+                <th>Via</th>
+                <th>Wt (lbs)</th>
+                <th>Lines</th>
+                <th>Risk</th>
+                <th>Cutting</th>
+                <th>Routing</th>
+                <th>Assigned By</th>
+                <th>Front WH</th>
+                <th>Routed 12'</th>
+                <th>Routed Back</th>
+                <th>Comments</th>
+                <th>Status</th>
+                <th>Update</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="od-body"></tbody>
+          </table>
+        </div>
       </div>
 
       <!-- ACTIVITY -->
@@ -799,8 +815,9 @@ function initPortal(){
 
 function renderAll(){
   renderHomeMetrics();
-  renderOrderLog();
   renderActivity();
+  window.renderWarehouse();
+  window.renderOrderDashboard();
 }
 
 function populateDropdowns(){
@@ -836,10 +853,11 @@ window.showPage=function(page){
     el.classList.toggle('active',el.getAttribute('data-mob')===page);
   });
   if(page==='bt-calendar') renderCalendar();
-  if(page==='order-log') renderOrderLog();
   if(page==='shipments') renderShipments();
   if(page==='activity') renderActivity();
   if(page==='settings') renderSettingsLists();
+  if(page==='warehouse') window.renderWarehouse();
+  if(page==='order-dashboard') window.renderOrderDashboard();
   window.scrollTo(0,0);
 };
 
@@ -875,11 +893,7 @@ window.submitOrder=async function(){
     lines:document.getElementById('oe-lines').value,
     cutting,
     estTime:cutting==='Y'?document.getElementById('oe-time').value:'',
-    front:document.getElementById('oe-front').value.trim(),
-    back:document.getElementById('oe-back').value.trim(),
-    routed12:document.getElementById('oe-routed12').value.trim(),
-    routedBack:document.getElementById('oe-routedback').value.trim(),
-    assigned:document.getElementById('oe-assigned').value.trim(),
+    front:'',back:'',routed12:'',routedBack:'',assigned:'',
     comments:document.getElementById('oe-comments').value.trim(),
     status:'Entered',
     archived:false,
@@ -892,14 +906,22 @@ window.submitOrder=async function(){
     batch.set(orderRef,orderData);
     // Auto-route: BT delivery
     if(via==='BT'){
-      const truck=document.getElementById('oe-truck').value;
       const city=document.getElementById('oe-city').value.trim();
+      const btRef=document.getElementById('oe-bt-ref').value.trim();
       const delRef=doc(deliveriesRef);
       batch.set(delRef,{
-        id:uid(),so,customer,truck,city,
+        id:uid(),
+        so:btRef||so,
+        soOriginal:so,
+        customer:orderData.customer,
+        truck:'Unassigned',
+        city,
+        btRef,
         date:shipDate||'',
         weight:orderData.weight,
-        sp,status:'Scheduled',added:Date.now(),
+        sp:orderData.sp,
+        status:'Unassigned',
+        added:Date.now(),
       });
     }
     // Auto-route: Carrier shipment
@@ -963,7 +985,7 @@ async function pushToSawApp(order){
 }
 
 window.clearOrderForm=function(keepMsg){
-  ['oe-so','oe-customer','oe-po','oe-weight','oe-lines','oe-front','oe-back','oe-routed12','oe-routedback','oe-assigned','oe-comments','oe-time','oe-city'].forEach(id=>{
+  ['oe-so','oe-customer','oe-po','oe-weight','oe-lines','oe-comments','oe-time','oe-city','oe-bt-ref'].forEach(id=>{
     const el=document.getElementById(id);if(el)el.value='';
   });
   ['oe-sp','oe-risk','oe-via','oe-cutting'].forEach(id=>{
@@ -976,68 +998,13 @@ window.clearOrderForm=function(keepMsg){
   if(!keepMsg)document.getElementById('oe-msg').textContent='';
 };
 
-// ── ORDER LOG ─────────────────────────────────────────────
-window.renderOrderLog=function(){
-  const search=(document.getElementById('ol-search')?.value||'').toLowerCase();
-  const spF=document.getElementById('ol-sp-filter')?.value||'';
-  const statusF=document.getElementById('ol-status-filter')?.value||'';
-  const showArchive=document.getElementById('ol-show-archive')?.checked;
-  // Populate SP filter
-  const spSel=document.getElementById('ol-sp-filter');
-  if(spSel&&spSel.options.length<=1){
-    settings.sps.forEach(s=>{const o=document.createElement('option');o.value=s.init;o.textContent=s.init;spSel.appendChild(o);});
-  }
-  let visible=orders.filter(o=>{
-    if(!showArchive&&o.archived) return false;
-    if(spF&&o.sp!==spF) return false;
-    if(statusF&&o.status!==statusF) return false;
-    if(search&&!`${o.so} ${o.customer} ${o.sp}`.toLowerCase().includes(search)) return false;
-    return true;
-  });
-  const tbody=document.getElementById('order-log-body');
-  if(!visible.length){tbody.innerHTML=`<tr><td colspan="13" class="empty">No orders found</td></tr>`;return;}
-  tbody.innerHTML=visible.map(o=>`
-    <tr class="${isOverdue(o.ship)&&o.status!=='Shipped'&&o.status!=='Invoiced'?'overdue':''}">
-      <td style="font-weight:500;">${o.so}</td>
-      <td>${o.customer}</td>
-      <td><span class="badge badge-blue">${o.sp||'—'}</span></td>
-      <td style="white-space:nowrap;">${fmtDate(o.entry)}</td>
-      <td style="white-space:nowrap;${isOverdue(o.ship)&&o.status!=='Shipped'?'color:#991B1B;font-weight:500;':''}">${fmtDate(o.ship)}</td>
-      <td>${o.via||'—'}</td>
-      <td>${o.weight?Number(o.weight).toLocaleString()+' lbs':'—'}</td>
-      <td>${o.lines||'—'}</td>
-      <td>${riskBadge(o.risk)}</td>
-      <td><span class="badge ${o.cutting==='Y'?'badge-orange':'badge-gray'}">${o.cutting||'—'}</span></td>
-      <td>
-        <select style="font-size:11px;padding:2px 6px;border:1px solid #e0e0e0;border-radius:4px;" onchange="updateOrderStatus('${o.docId}',this.value)">
-          ${['Entered','Cutting','Ready','Shipped','Invoiced'].map(s=>`<option ${s===o.status?'selected':''}>${s}</option>`).join('')}
-        </select>
-      </td>
-      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${o.comments||'—'}</td>
-      <td><button class="btn" style="font-size:11px;padding:2px 8px;" onclick="openEditOrder('${o.docId}')">Edit</button></td>
-    </tr>`).join('');
-};
-
+// ── ORDER STATUS & EDIT ───────────────────────────────────
 window.updateOrderStatus=async function(docId,status){
   await updateDoc(doc(db,'orders',docId),{status});
-  // Auto-archive if shipped and ship date passed
   if(status==='Shipped'||status==='Invoiced'){
     const o=orders.find(o=>o.docId===docId);
     if(o&&isOverdue(o.ship)) await updateDoc(doc(db,'orders',docId),{archived:true});
   }
-};
-
-window.exportOrderLog=function(){
-  const headers=['SO#','Customer','SP','Entry','Ship Date','Via','Weight','Lines','Risk','Cutting','Est Time','Status','Comments'];
-  const rows=orders.filter(o=>!o.archived).map(o=>[
-    o.so,o.customer,o.sp,o.entry,o.ship,o.via,o.weight,o.lines,o.risk,o.cutting,o.estTime,o.status,
-    `"${(o.comments||'').replace(/"/g,'""')}"`
-  ].join(','));
-  const csv=[headers.join(','),...rows].join('\n');
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download=`bergsen-orders-${new Date().toISOString().slice(0,10)}.csv`;
-  a.click();
 };
 
 window.openEditOrder=function(docId){
@@ -1103,7 +1070,78 @@ window.deleteOrder=async function(docId){
   closeModalDirect();
 };
 
-// ── SHIPMENTS ─────────────────────────────────────────────
+// ── WAREHOUSE ROUTING ─────────────────────────────────────
+window.renderWarehouse=function(){
+  const search=(document.getElementById('wr-search')?.value||'').toLowerCase();
+  const filter=document.getElementById('wr-filter')?.value||'unrouted';
+  let visible=orders.filter(o=>{
+    if(o.archived) return false;
+    if(filter==='unrouted'&&o.routed) return false;
+    if(filter==='routed'&&!o.routed) return false;
+    if(search&&!`${o.so} ${o.customer}`.toLowerCase().includes(search)) return false;
+    return true;
+  });
+  const el=document.getElementById('warehouse-list');
+  if(!el) return;
+  if(!visible.length){
+    el.innerHTML=`<div class="empty">${filter==='unrouted'?'All orders have been routed 🎉':'No orders found'}</div>`;
+    return;
+  }
+  el.innerHTML=visible.map(o=>`
+    <div class="form-card" style="margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+        <div>
+          <span style="font-weight:600;font-size:15px;">${o.so}</span>
+          <span style="color:#666;font-size:13px;margin-left:10px;">${o.customer}</span>
+          <span class="badge badge-blue" style="margin-left:8px;">${o.sp||'—'}</span>
+          ${o.routed?'<span class="badge badge-green" style="margin-left:6px;">Routed</span>':'<span class="badge badge-yellow" style="margin-left:6px;">Needs routing</span>'}
+        </div>
+        <span style="font-size:12px;color:#999;">Ship: ${o.ship?new Date(o.ship+'T00:00:00').toLocaleDateString([],{month:'numeric',day:'numeric',year:'2-digit'}):'—'} · Via: ${o.via||'—'} · ${o.weight?Number(o.weight).toLocaleString()+' lbs':'—'}</span>
+      </div>
+      <div class="form-grid four">
+        <div>
+          <label class="field-label">Assigned By</label>
+          <input type="text" id="wr-assigned-${o.docId}" value="${o.assigned||''}" placeholder="Initials" onfocus="window.setEditingTrue&&window.setEditingTrue()" onblur="window.setEditingFalse&&window.setEditingFalse()" onchange="window.saveWarehouseField('${o.docId}','assigned',this.value)">
+        </div>
+        <div>
+          <label class="field-label">Front Warehouse</label>
+          <input type="text" id="wr-front-${o.docId}" value="${o.front||''}" placeholder="e.g. ELROY" onfocus="window.setEditingTrue&&window.setEditingTrue()" onblur="window.setEditingFalse&&window.setEditingFalse()" onchange="window.saveWarehouseField('${o.docId}','front',this.value)">
+        </div>
+        <div>
+          <label class="field-label">Routed 12'</label>
+          <input type="text" id="wr-routed12-${o.docId}" value="${o.routed12||''}" placeholder="Initials" onfocus="window.setEditingTrue&&window.setEditingTrue()" onblur="window.setEditingFalse&&window.setEditingFalse()" onchange="window.saveWarehouseField('${o.docId}','routed12',this.value)">
+        </div>
+        <div>
+          <label class="field-label">Routed Back</label>
+          <input type="text" id="wr-routedback-${o.docId}" value="${o.routedBack||''}" placeholder="Initials" onfocus="window.setEditingTrue&&window.setEditingTrue()" onblur="window.setEditingFalse&&window.setEditingFalse()" onchange="window.saveWarehouseField('${o.docId}','routedBack',this.value)">
+        </div>
+        <div class="span4" style="grid-column:span 4;">
+          <label class="field-label">Comments</label>
+          <input type="text" id="wr-comments-${o.docId}" value="${o.comments||''}" placeholder="Routing notes, special instructions..." onfocus="window.setEditingTrue&&window.setEditingTrue()" onblur="window.setEditingFalse&&window.setEditingFalse()" onchange="window.saveWarehouseField('${o.docId}','comments',this.value)">
+        </div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;">
+        <button class="btn btn-success" style="font-size:12px;" onclick="window.markRouted('${o.docId}')">✓ Mark as routed</button>
+        ${o.routed?`<button class="btn" style="font-size:12px;" onclick="window.unmarkRouted('${o.docId}')">Unmark routed</button>`:''}
+      </div>
+    </div>`).join('');
+};
+
+window.saveWarehouseField=async function(docId,field,value){
+  try{ await updateDoc(doc(db,'orders',docId),{[field]:value}); }
+  catch(e){ console.error(e); }
+};
+
+window.markRouted=async function(docId){
+  await updateDoc(doc(db,'orders',docId),{routed:true});
+  toast('Order marked as routed!');
+};
+
+window.unmarkRouted=async function(docId){
+  await updateDoc(doc(db,'orders',docId),{routed:false});
+  toast('Routing cleared');
+};
+// ── END WAREHOUSE ROUTING ──────────────────────────────────
 window.renderShipments=function(){
   const search=(document.getElementById('sh-search')?.value||'').toLowerCase();
   const carrierF=document.getElementById('sh-carrier-filter')?.value||'';
@@ -1266,8 +1304,9 @@ function renderCalendar(){
     const isToday=today.getFullYear()===calYear&&today.getMonth()===calMonth&&today.getDate()===d;
     const dayDeliveries=deliveries.filter(del=>del.date===dateStr);
     const eventHtml=dayDeliveries.map(del=>{
-      const cls=del.truck==='Gus'?'gus':del.truck==='JC'?'jc':'sergio';
-      return `<div class="cal-event ${cls}" title="${del.truck}: ${del.customer} (${del.city||''})">${del.truck}: ${del.so}</div>`;
+      const cls=del.truck==='Unassigned'?'unassigned':del.truck==='Gus'?'gus':del.truck==='JC'?'jc':'sergio';
+      const label=del.truck==='Unassigned'?`⚠ ${del.so}`:`${del.truck}: ${del.so}`;
+      return `<div class="cal-event ${cls}" title="${del.customer} — ${del.city||''}" onclick="event.stopPropagation();window.openEditDelivery('${del.docId}')">${label}</div>`;
     }).join('');
     html+=`<div class="cal-day${isToday?' today':''}" onclick="openAddDelivery('${dateStr}')">
       <div class="cal-date${isToday?' today-num':''}">${d}</div>
@@ -1316,17 +1355,118 @@ window.saveDelivery=async function(){
   renderCalendar();
 };
 
-// ── HOME METRICS ──────────────────────────────────────────
+window.openEditDelivery=function(docId){
+  const d=deliveries.find(d=>d.docId===docId);
+  if(!d) return;
+  const truckOpts=['Unassigned',...settings.trucks].map(t=>`<option value="${t}" ${t===d.truck?'selected':''}>${t}</option>`).join('');
+  openModal('Edit BT Delivery — '+d.so,`
+    <div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#92400E;">
+      ${d.truck==='Unassigned'?'⚠ <strong>Truck not yet assigned</strong> — assign a truck below':'🚛 Assigned to <strong>'+d.truck+'</strong>'}
+    </div>
+    <div class="form-grid">
+      <div><label class="field-label">Assign Truck</label><select id="ed-truck">${truckOpts}</select></div>
+      <div><label class="field-label">Delivery Date</label><input type="date" id="ed-date" value="${d.date||''}"></div>
+      <div><label class="field-label">Customer</label><input type="text" id="ed-customer" value="${d.customer||''}"></div>
+      <div><label class="field-label">City</label><input type="text" id="ed-city" value="${d.city||''}"></div>
+      <div><label class="field-label">PO # / SO #</label><input type="text" id="ed-ref" value="${d.btRef||d.so||''}"></div>
+      <div><label class="field-label">Weight (lbs)</label><input type="number" id="ed-weight" value="${d.weight||''}"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn btn-primary" onclick="window.saveEditDelivery('${docId}')">Save</button>
+      <button class="btn btn-danger" onclick="window.deleteDelivery('${docId}')">Remove</button>
+    </div>
+  `);
+};
+
+window.saveEditDelivery=async function(docId){
+  const truck=document.getElementById('ed-truck').value;
+  await updateDoc(doc(db,'deliveries',docId),{
+    truck,
+    date:document.getElementById('ed-date').value,
+    customer:document.getElementById('ed-customer').value.trim(),
+    city:document.getElementById('ed-city').value.trim(),
+    btRef:document.getElementById('ed-ref').value.trim(),
+    weight:document.getElementById('ed-weight').value,
+    status:truck==='Unassigned'?'Unassigned':'Scheduled',
+  });
+  toast(truck==='Unassigned'?'Delivery updated':'Assigned to '+truck+'!');
+  closeModalDirect();renderCalendar();
+};
+
+window.deleteDelivery=async function(docId){
+  if(!confirm('Remove this delivery from the calendar?')) return;
+  await deleteDoc(doc(db,'deliveries',docId));
+  toast('Delivery removed','#991B1B');closeModalDirect();renderCalendar();
+};
+// ── ORDER DASHBOARD ───────────────────────────────────────
+window.renderOrderDashboard=function(){
+  const search=(document.getElementById('od-search')?.value||'').toLowerCase();
+  const spF=document.getElementById('od-sp')?.value||'';
+  const routingF=document.getElementById('od-routing')?.value||'';
+  const viaF=document.getElementById('od-via')?.value||'';
+  const showArchived=document.getElementById('od-archived')?.checked;
+  const spSel=document.getElementById('od-sp');
+  if(spSel&&spSel.options.length<=1) settings.sps.forEach(s=>{const o=document.createElement('option');o.value=s.init;o.textContent=s.init;spSel.appendChild(o);});
+  const viaSel=document.getElementById('od-via');
+  if(viaSel&&viaSel.options.length<=1) settings.carriers.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;viaSel.appendChild(o);});
+  let visible=orders.filter(o=>{
+    if(!showArchived&&o.archived) return false;
+    if(spF&&o.sp!==spF) return false;
+    if(viaF&&o.via!==viaF) return false;
+    if(routingF==='routed'&&!o.routed) return false;
+    if(routingF==='unrouted'&&o.routed) return false;
+    if(search&&!`${o.so} ${o.customer} ${o.sp}`.toLowerCase().includes(search)) return false;
+    return true;
+  });
+  visible.sort((a,b)=>(b.added||0)-(a.added||0));
+  document.getElementById('od-count').textContent=`${visible.length} order${visible.length!==1?'s':''}`;
+  const tbody=document.getElementById('od-body');
+  if(!tbody) return;
+  if(!visible.length){tbody.innerHTML=`<tr><td colspan="19" class="empty">No orders found</td></tr>`;return;}
+  tbody.innerHTML=visible.map(o=>{
+    const routingStatus=o.routed?`<span class="badge badge-green">✓ Routed</span>`:`<span class="badge badge-yellow">Pending</span>`;
+    const overdueCls=isOverdue(o.ship)&&!['Shipped','Invoiced'].includes(o.status)?'color:#991B1B;font-weight:500;':'';
+    return `<tr class="${isOverdue(o.ship)&&!['Shipped','Invoiced'].includes(o.status)?'overdue':''}">
+      <td style="font-weight:600;">${o.so}</td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${o.customer}</td>
+      <td><span class="badge badge-blue">${o.sp||'—'}</span></td>
+      <td style="white-space:nowrap;">${o.entry?new Date(o.entry+'T00:00:00').toLocaleDateString([],{month:'numeric',day:'numeric',year:'2-digit'}):'—'}</td>
+      <td style="white-space:nowrap;${overdueCls}">${o.ship?new Date(o.ship+'T00:00:00').toLocaleDateString([],{month:'numeric',day:'numeric',year:'2-digit'}):'—'}</td>
+      <td>${o.via||'—'}</td>
+      <td style="text-align:right;">${o.weight?Number(o.weight).toLocaleString():'—'}</td>
+      <td style="text-align:center;">${o.lines||'—'}</td>
+      <td>${riskBadge(o.risk)}</td>
+      <td><span class="badge ${o.cutting==='Y'?'badge-orange':'badge-gray'}">${o.cutting||'—'}</span></td>
+      <td>${routingStatus}</td>
+      <td style="text-align:center;">${o.assigned||'—'}</td>
+      <td style="text-align:center;">${o.front||'—'}</td>
+      <td style="text-align:center;">${o.routed12||'—'}</td>
+      <td style="text-align:center;">${o.routedBack||'—'}</td>
+      <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#666;">${o.comments||'—'}</td>
+      <td>${statusBadge(o.status)}</td>
+      <td>
+        <select style="font-size:11px;padding:2px 6px;border:1px solid #e0e0e0;border-radius:4px;" onchange="window.updateOrderStatus('${o.docId}',this.value)">
+          ${['Entered','Cutting','Ready','Shipped','Invoiced'].map(s=>`<option ${s===o.status?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </td>
+      <td><button class="btn" style="font-size:11px;padding:2px 8px;" onclick="window.openEditOrder('${o.docId}')">Edit</button></td>
+    </tr>`;
+  }).join('');
+};
+// ── END ORDER DASHBOARD ────────────────────────────────────
+
 function renderHomeMetrics(){
   const today=new Date().toISOString().split('T')[0];
   const activeOrders=orders.filter(o=>!o.archived);
   const todayShip=orders.filter(o=>o.ship===today&&!o.archived);
   const overdue=orders.filter(o=>isOverdue(o.ship)&&!['Shipped','Invoiced'].includes(o.status)&&!o.archived);
   const pendingShip=shipments.filter(s=>!s.pickedUp);
+  const unrouted=orders.filter(o=>!o.archived&&!o.routed);
   document.getElementById('home-metrics').innerHTML=`
     <div class="metric-card"><div class="metric-label">Active orders</div><div class="metric-val blue">${activeOrders.length}</div><div class="metric-sub">in the log</div></div>
     <div class="metric-card"><div class="metric-label">Shipping today</div><div class="metric-val green">${todayShip.length}</div><div class="metric-sub">due today</div></div>
     <div class="metric-card"><div class="metric-label">Overdue</div><div class="metric-val ${overdue.length?'red':''}">${overdue.length}</div><div class="metric-sub">past ship date</div></div>
+    <div class="metric-card"><div class="metric-label">Needs routing</div><div class="metric-val ${unrouted.length?'orange':''}">${unrouted.length}</div><div class="metric-sub">warehouse pending</div></div>
     <div class="metric-card"><div class="metric-label">Pending shipments</div><div class="metric-val orange">${pendingShip.length}</div><div class="metric-sub">awaiting pickup</div></div>
   `;
 }
@@ -1455,4 +1595,3 @@ try {
 </script>
 </body>
 </html>
-
