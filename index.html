@@ -377,6 +377,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:#0f3460;}
           <div class="settings-title">📍 Customer address book</div>
           <p style="font-size:12px;color:#666;margin-bottom:10px;">Add customer addresses as they come up. Used for BT route optimization.</p>
           <input id="cust-search" placeholder="🔍 Search customers..." style="max-width:260px;margin-bottom:10px;" oninput="P.renderAddressBook()">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+            <button class="btn" style="font-size:12px;background:#1E40AF;color:#fff;border-color:#1E40AF;" onclick="P.geocodeAll()">⟳ Geocode all missing</button>
+          </div>
           <div id="address-book-list"></div>
           <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:flex-end;">
             <div><label class="fl">Customer name</label><input id="new-cust-name" placeholder="Customer name" style="max-width:200px;"></div>
@@ -1152,9 +1155,12 @@ P.renderDaySummary=function(dateStr){
           ${allAssigned?'<span class="badge b-green" style="margin-left:8px;">✓ All assigned</span>':`<span class="badge b-red" style="margin-left:8px;">⚠ ${unassigned.length} unassigned</span>`}
           ${missingAddr.length>0?`<span class="badge b-yellow" style="margin-left:6px;">⚠ ${missingAddr.length} missing address</span>`:'<span class="badge b-green" style="margin-left:6px;">✓ All addresses set</span>'}
         </div>
-        ${allAssigned
-          ?`<button class="btn btn-success" onclick="P.exportDay('${dateStr}')">⬇ Export Route Sheet</button>`
-          :`<span style="font-size:12px;color:#999;">Assign all deliveries to enable export</span>`}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn" style="font-size:12px;background:#1E40AF;color:#fff;border-color:#1E40AF;" onclick="P.importDayToAddressBook('${dateStr}')">📍 Import to address book</button>
+          ${allAssigned
+            ?`<button class="btn btn-success" onclick="P.exportDay('${dateStr}')">⬇ Export Route Sheet</button>`
+            :`<span style="font-size:12px;color:#999;align-self:center;">Assign all deliveries to enable export</span>`}
+        </div>
       </div>
       <datalist id="addr-book-list">${custOptions}</datalist>
       ${Object.entries(byTruck).map(([truck,dels])=>`
@@ -1203,7 +1209,21 @@ P.renderDaySummary=function(dateStr){
 };
 
 // Save address directly from day summary panel
-P.saveDeliveryAddr=async function(docId,dateStr){
+P.importDayToAddressBook=async function(dateStr){
+  const dayDels=deliveries.filter(d=>d.date===dateStr&&d.address&&d.customer);
+  if(!dayDels.length){toast('No deliveries with addresses to import','#991B1B');return;}
+  if(!settings.customers)settings.customers=[];
+  let added=0;
+  dayDels.forEach(d=>{
+    if(!settings.customers.find(c=>c.name.toLowerCase()===d.customer.toLowerCase())){
+      settings.customers.push({name:d.customer,address:d.address});
+      added++;
+    }
+  });
+  if(!added){toast('All customers already in address book!');return;}
+  await saveSettings();
+  toast(`✓ ${added} customer${added>1?'s':''} added to address book! Go to Settings to geocode them.`);
+};
   const input=document.getElementById('addr-input-'+docId);
   if(!input)return;
   const address=input.value.trim();
@@ -1447,24 +1467,32 @@ const WAREHOUSE_LNG=-118.07065790350524;
 
 async function geocodeAddress(address){
   return new Promise((resolve)=>{
+    // Timeout after 5 seconds
+    const timer=setTimeout(()=>{
+      console.warn('Geocode timed out for:',address);
+      resolve(null);
+    },5000);
     try{
       if(typeof google==='undefined'||!google.maps||!google.maps.Geocoder){
-        console.warn('Google Maps not loaded yet');resolve(null);return;
+        console.warn('Google Maps not loaded yet');
+        clearTimeout(timer);resolve(null);return;
       }
       const geocoder=new google.maps.Geocoder();
       geocoder.geocode({address},(results,status)=>{
-        console.log('Geocode status:',status,'results:',results);
+        clearTimeout(timer);
+        console.log('Geocode status:',status,'for:',address);
         if(status==='OK'&&results[0]){
           const loc=results[0].geometry.location;
           const out={lat:loc.lat(),lng:loc.lng(),formattedAddress:results[0].formatted_address};
           console.log('Geocode success:',out);
           resolve(out);
         } else {
-          console.warn('Geocode failed:',status);
+          console.warn('Geocode failed:',status,'for:',address);
           resolve(null);
         }
       });
     }catch(e){
+      clearTimeout(timer);
       console.error('Geocode error:',e);
       resolve(null);
     }
@@ -1601,7 +1629,9 @@ P.showAutoRoute=async function(dateStr){
   // Step 1 — Geocode any stops missing coordinates
   progress.textContent='⟳ Geocoding delivery addresses...';
   const enriched=[];
-  for(const d of allDels){
+  for(let idx=0;idx<allDels.length;idx++){
+    const d=allDels[idx];
+    progress.textContent=`⟳ Geocoding stop ${idx+1} of ${allDels.length}: ${d.customer||d.so}...`;
     let lat=null,lng=null;
     // Try address book first
     const coords=findCustomerCoords(d.customer);
@@ -1609,7 +1639,8 @@ P.showAutoRoute=async function(dateStr){
     else if(d.address||d.city){
       const addr=d.address||(d.city+', CA');
       const geo=await geocodeAddress(addr);
-      if(geo){lat=geo.lat;lng=geo.lng;
+      if(geo){
+        lat=geo.lat;lng=geo.lng;
         // Save to address book automatically
         if(d.customer&&!(settings.customers||[]).find(c=>c.name.toLowerCase()===d.customer.toLowerCase())){
           if(!settings.customers)settings.customers=[];
@@ -1618,7 +1649,9 @@ P.showAutoRoute=async function(dateStr){
         }
       }
     }
-    enriched.push({...d,lat:lat||WAREHOUSE_LAT,lng:lng||WAREHOUSE_LNG,hasCoords:!!(lat&&lng)});
+    // If still no coords, use warehouse as fallback
+    if(!lat||!lng){lat=WAREHOUSE_LAT;lng=WAREHOUSE_LNG;}
+    enriched.push({...d,lat,lng,hasCoords:!!(lat&&lng&&!(lat===WAREHOUSE_LAT&&lng===WAREHOUSE_LNG))});
   }
 
   const missingCoords=enriched.filter(d=>!d.hasCoords).length;
@@ -1761,20 +1794,41 @@ P.saveWarehouseAddress=async function(){
 P.renderAddressBook=function(){
   const search=(document.getElementById('cust-search')?.value||'').toLowerCase();
   const el=document.getElementById('address-book-list');if(!el)return;
-  const filtered=(settings.customers||[]).filter(c=>!search||c.name.toLowerCase().includes(search)||c.address.toLowerCase().includes(search));
+  const filtered=(settings.customers||[]).map((c,realIndex)=>({...c,realIndex})).filter(c=>!search||c.name.toLowerCase().includes(search)||c.address.toLowerCase().includes(search));
   if(!filtered.length){el.innerHTML=`<div style="font-size:12px;color:#999;padding:8px 0;">${search?'No customers match':'No customers yet — add them below as they come up'}</div>`;return;}
-  el.innerHTML=filtered.map((c,i)=>`
+  el.innerHTML=filtered.map((c)=>`
     <div class="srow">
       <div style="flex:1;">
         <span style="font-weight:500;font-size:13px;">${c.name}</span>
         <span style="font-size:12px;color:#666;margin-left:10px;">📍 ${c.address}</span>
-        ${c.lat?`<span style="font-size:11px;color:#065F46;margin-left:6px;">✓ Geocoded</span>`:`<span style="font-size:11px;color:#B45309;margin-left:6px;"><a href="#" onclick="event.preventDefault();P.geocodeCustomer(${i})" style="color:#B45309;">⟳ Geocode</a></span>`}
+        ${c.lat
+          ?`<span style="font-size:11px;color:#065F46;margin-left:6px;">✓ Geocoded (${c.lat.toFixed(4)}, ${c.lng.toFixed(4)})</span>`
+          :`<button onclick="P.geocodeCustomer(${c.realIndex})" style="font-size:11px;color:#B45309;background:#FEF3C7;border:1px solid #FCD34D;border-radius:4px;padding:2px 8px;cursor:pointer;margin-left:6px;">⟳ Geocode</button>`}
       </div>
-      <button class="btn btn-danger" style="font-size:11px;padding:2px 8px;" onclick="P.removeCustomer(${i})">Remove</button>
+      <button class="btn btn-danger" style="font-size:11px;padding:2px 8px;" onclick="P.removeCustomer(${c.realIndex})">Remove</button>
     </div>`).join('');
 };
 
-P.removeCustomer=async function(i){
+P.geocodeAll=async function(){
+  const missing=(settings.customers||[]).filter(c=>!c.lat);
+  if(!missing.length){toast('All customers already geocoded!');return;}
+  toast(`Geocoding ${missing.length} customers...`,'#1E40AF');
+  let count=0;
+  for(let i=0;i<settings.customers.length;i++){
+    if(settings.customers[i].lat)continue;
+    const result=await geocodeAddress(settings.customers[i].address);
+    if(result){
+      settings.customers[i].lat=result.lat;
+      settings.customers[i].lng=result.lng;
+      settings.customers[i].formattedAddress=result.formattedAddress;
+      count++;
+    }
+    P.renderAddressBook();
+  }
+  await saveSettings();
+  toast(`✓ Geocoded ${count} of ${missing.length} customers!`);
+  P.renderAddressBook();
+};
   settings.customers.splice(i,1);
   await saveSettings();P.renderAddressBook();
 };
