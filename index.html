@@ -258,6 +258,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:#0f3460;}
               </select>
             </div>
             <div id="oe-dropship-wrap" style="display:none;"><label class="fl">Drop Ship Company</label><input id="oe-dropship-company" placeholder="Company name"></div>
+            <div class="s3"><label class="fl">BT Notes</label><input id="oe-bt-notes" placeholder='e.g. Driver to pick up check, call ahead, gate code, etc.'></div>
           </div>
         </div>
 
@@ -313,15 +314,24 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:#0f3460;}
           <button class="btn" id="cal-prev">← Prev</button>
           <span id="cal-label" style="font-weight:600;font-size:14px;min-width:160px;text-align:center;"></span>
           <button class="btn" id="cal-next">Next →</button>
-          <div style="display:flex;gap:6px;align-items:center;font-size:12px;margin-left:auto;">
+          <div style="display:flex;gap:6px;align-items:center;font-size:12px;margin-left:8px;">
             <span style="background:#FEE2E2;color:#991B1B;padding:2px 8px;border-radius:4px;border:1px dashed #FCA5A5;">⚠ Unassigned</span>
             <span style="background:#DBEAFE;color:#1E40AF;padding:2px 8px;border-radius:4px;">Gus</span>
             <span style="background:#D1FAE5;color:#065F46;padding:2px 8px;border-radius:4px;">JC</span>
             <span style="background:#FEF3C7;color:#92400E;padding:2px 8px;border-radius:4px;">Sergio</span>
           </div>
-          <button class="btn btn-primary" style="font-size:12px;" id="btn-add-del">+ Add delivery</button>
+          <div style="display:flex;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <label style="font-size:12px;color:#666;white-space:nowrap;">Export day:</label>
+              <input type="date" id="cal-export-date" style="font-size:12px;padding:5px 8px;width:auto;">
+            </div>
+            <button class="btn btn-success" style="font-size:12px;" id="btn-export-day">⬇ Export Day</button>
+            <button class="btn btn-primary" style="font-size:12px;" id="btn-add-del">+ Add delivery</button>
+          </div>
         </div>
         <div class="cal-grid" id="cal-grid"></div>
+        <!-- Daily summary panel -->
+        <div id="cal-day-summary" style="display:none;margin-top:16px;"></div>
       </div>
 
       <!-- TASKS -->
@@ -501,11 +511,30 @@ function showPortal(){
   const h=new Date().getHours();
   document.getElementById('home-greet').textContent=(h<12?'Good morning':h<17?'Good afternoon':'Good evening')+' 👋';
   document.getElementById('home-date-sub').textContent=new Date().toLocaleDateString([],{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-  // Wire up order entry routing listeners now that elements exist
+  // Wire all portal buttons now that elements exist
   document.getElementById('oe-via').onchange=checkRouting;
   document.getElementById('oe-cutting').onchange=checkRouting;
   document.getElementById('oe-ship').onchange=checkRouting;
   document.getElementById('oe-dropship').addEventListener('change',checkRouting);
+  document.getElementById('btn-settings').onclick=()=>P.showPage('settings');
+  document.getElementById('submit-order-btn').onclick=submitOrder;
+  document.getElementById('clear-order-btn').onclick=()=>clearOrderForm(false);
+  document.getElementById('btn-add-ship').onclick=openAddShipment;
+  document.getElementById('cal-prev').onclick=()=>{calMonth--;if(calMonth<0){calMonth=11;calYear--;}renderCal();};
+  document.getElementById('cal-next').onclick=()=>{calMonth++;if(calMonth>11){calMonth=0;calYear++;}renderCal();};
+  document.getElementById('btn-add-del').onclick=()=>P.addDelivery('');
+  document.getElementById('cal-export-date').value=new Date().toISOString().split('T')[0];
+  document.getElementById('cal-export-date').addEventListener('change',function(){P.renderDaySummary(this.value);});
+  document.getElementById('btn-export-day').onclick=()=>{const d=document.getElementById('cal-export-date').value;if(d)P.exportDay(d);else toast('Please select a date first','#991B1B');};
+  document.getElementById('btn-new-task').onclick=openNewTask;
+  document.getElementById('btn-add-sp').onclick=addSP;
+  document.getElementById('btn-add-carrier').onclick=addCarrier;
+  document.getElementById('btn-add-truck').onclick=addTruck;
+  document.getElementById('btn-change-pass').onclick=changePass;
+  document.getElementById('modal-close').onclick=closeModal;
+  document.getElementById('modal-overlay').onclick=e=>{if(e.target===document.getElementById('modal-overlay'))closeModal();};
+  document.querySelectorAll('.sidebar-item').forEach(el=>el.onclick=()=>P.showPage(el.getAttribute('data-page')));
+  document.querySelectorAll('.mob-btn').forEach(el=>el.onclick=()=>P.showPage(el.getAttribute('data-mob')));
   populateDropdowns();
   // Realtime listeners
   onSnapshot(query(ordersRef,orderBy('added','desc')),snap=>{orders=snap.docs.map(d=>({...d.data(),docId:d.id}));renderAll();});
@@ -555,9 +584,6 @@ P.showPage=function(page){
   if(page==='order-dashboard')P.renderOD();
   window.scrollTo(0,0);
 };
-document.querySelectorAll('.sidebar-item').forEach(el=>el.onclick=()=>P.showPage(el.getAttribute('data-page')));
-document.querySelectorAll('.mob-btn').forEach(el=>el.onclick=()=>P.showPage(el.getAttribute('data-mob')));
-document.getElementById('btn-settings').onclick=()=>P.showPage('settings');
 
 // CUT LINES
 function renderCutLines(){
@@ -597,7 +623,7 @@ function checkRouting(){
 // ORDER ENTRY ROUTING — listeners attached in showPortal()
 
 // SUBMIT ORDER
-document.getElementById('submit-order-btn').onclick=async function(){
+async function submitOrder(){
   const so=document.getElementById('oe-so').value.trim();
   const customer=document.getElementById('oe-customer').value.trim();
   const sp=document.getElementById('oe-sp').value;
@@ -630,8 +656,9 @@ document.getElementById('submit-order-btn').onclick=async function(){
       const city=document.getElementById('oe-city').value.trim();
       const ds=document.getElementById('oe-dropship').value;
       const dsCo=document.getElementById('oe-dropship-company').value.trim();
+      const btNotes=document.getElementById('oe-bt-notes').value.trim();
       const deliverName=ds==='Yes'&&dsCo?dsCo:customer;
-      batch.set(doc(deliveriesRef),{id:uid(),so,soOriginal:so,customer:deliverName,truck:'Unassigned',city,dropShip:ds,dropShipCompany:dsCo,date:shipDate||'',weight:orderData.weight,sp,status:'Unassigned',added:Date.now()});
+      batch.set(doc(deliveriesRef),{id:uid(),so,soOriginal:so,customer:deliverName,truck:'Unassigned',city,dropShip:ds,dropShipCompany:dsCo,notes:btNotes||orderData.comments||'',date:shipDate||'',weight:orderData.weight,sp,status:'Unassigned',added:Date.now()});
     }
     // Carrier shipment
     if(via&&via!=='BT'){
@@ -671,7 +698,7 @@ document.getElementById('submit-order-btn').onclick=async function(){
 };
 
 function clearOrderForm(keepMsg){
-  ['oe-so','oe-customer','oe-po','oe-weight','oe-lines','oe-comments','oe-city','oe-dropship-company'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['oe-so','oe-customer','oe-po','oe-weight','oe-lines','oe-comments','oe-city','oe-dropship-company','oe-bt-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   ['oe-sp','oe-risk','oe-via','oe-cutting'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('oe-entry').value=new Date().toISOString().split('T')[0];
   document.getElementById('oe-ship').value='';
@@ -681,7 +708,6 @@ function clearOrderForm(keepMsg){
   cutLines=[];cutLineCounter=0;renderCutLines();
   if(!keepMsg)document.getElementById('oe-msg').textContent='';
 }
-document.getElementById('clear-order-btn').onclick=()=>clearOrderForm(false);
 
 // ORDER DASHBOARD
 P.renderOD=function(){
@@ -855,7 +881,7 @@ P.markPickedUp=async function(docId){
   const spData=settings.sps.find(sp=>sp.init===s.sp);
   toast(`✓ ${s.so} picked up!${spData?' Notifying '+spData.init:''}` );
 };
-document.getElementById('btn-add-ship').onclick=function(){
+function openAddShipment(){
   const co=settings.carriers.filter(c=>c!=='BT').map(c=>`<option value="${c}">${c}</option>`).join('');
   const spOpts=settings.sps.map(s=>`<option value="${s.init}">${s.init}</option>`).join('');
   openModal('Add Shipment',`
@@ -871,7 +897,7 @@ document.getElementById('btn-add-ship').onclick=function(){
       <div class="s2"><label class="fl">Comments</label><input id="ns-comments" placeholder="Who arranges pickup, etc."></div>
     </div>
     <div style="margin-top:14px;"><button class="btn btn-primary" onclick="P.saveNewShipment()">Add</button></div>`);
-};
+}
 P.saveNewShipment=async function(){
   const so=document.getElementById('ns-so').value.trim();const customer=document.getElementById('ns-customer').value.trim();
   if(!so||!customer){toast('SO# and Customer required','#991B1B');return;}
@@ -920,14 +946,12 @@ function renderCal(){
       const lbl=del.truck==='Unassigned'?`⚠ ${del.so}`:`${del.truck}: ${del.so}`;
       return `<div class="cal-evt ${cls}" title="${del.customer} — ${del.city||''}" onclick="event.stopPropagation();P.editDelivery('${del.docId}')">${lbl}</div>`;
     }).join('');
-    html+=`<div class="cal-day${isToday?' today':''}" onclick="P.addDelivery('${ds}')"><div class="cal-date">${isToday?`<span class="cal-todaynum">${d}</span>`:d}</div>${evts}</div>`;
+    html+=`<div class="cal-day${isToday?' today':''}" onclick="P.selectCalDay('${ds}')"><div class="cal-date">${isToday?`<span class="cal-todaynum">${d}</span>`:d}</div>${evts}</div>`;
   }
   const total=Math.ceil((firstDay+daysInMonth)/7)*7;
   for(let d=1;d<=total-(firstDay+daysInMonth);d++)html+=`<div class="cal-day othermonth"><div class="cal-date">${d}</div></div>`;
   grid.innerHTML=html;
 }
-document.getElementById('cal-prev').onclick=()=>{calMonth--;if(calMonth<0){calMonth=11;calYear--;}renderCal();};
-document.getElementById('cal-next').onclick=()=>{calMonth++;if(calMonth>11){calMonth=0;calYear++;}renderCal();};
 const truckOpts=()=>['Unassigned',...settings.trucks].map(t=>`<option value="${t}">${t}</option>`).join('');
 P.addDelivery=function(date){
   openModal('Add BT Delivery',`
@@ -940,6 +964,7 @@ P.addDelivery=function(date){
       <div><label class="fl">Weight (lbs)</label><input type="number" id="nd-weight"></div>
       <div><label class="fl">Drop Ship?</label><select id="nd-ds"><option value="No">No</option><option value="Yes">Yes</option></select></div>
       <div><label class="fl">Drop Ship Company</label><input id="nd-dsco" placeholder="If drop ship"></div>
+      <div class="s2"><label class="fl">Notes</label><input id="nd-notes" placeholder='e.g. Driver to pick up check, call ahead, etc.'></div>
     </div>
     <div style="margin-top:14px;"><button class="btn btn-primary" onclick="P.saveDelivery()">Add</button></div>`);
 };
@@ -947,7 +972,7 @@ P.saveDelivery=async function(){
   const so=document.getElementById('nd-so').value.trim();const customer=document.getElementById('nd-customer').value.trim();
   if(!so||!customer){toast('SO# and Customer required','#991B1B');return;}
   const ds=document.getElementById('nd-ds').value;const dsCo=document.getElementById('nd-dsco').value.trim();
-  await addDoc(deliveriesRef,{id:uid(),so,customer,truck:document.getElementById('nd-truck').value,date:document.getElementById('nd-date').value,city:document.getElementById('nd-city').value.trim(),weight:document.getElementById('nd-weight').value,dropShip:ds,dropShipCompany:dsCo,status:'Scheduled',added:Date.now()});
+  await addDoc(deliveriesRef,{id:uid(),so,customer,truck:document.getElementById('nd-truck').value,date:document.getElementById('nd-date').value,city:document.getElementById('nd-city').value.trim(),weight:document.getElementById('nd-weight').value,dropShip:ds,dropShipCompany:dsCo,notes:document.getElementById('nd-notes').value.trim(),status:'Scheduled',added:Date.now()});
   toast('Delivery added!');closeModal();renderCal();
 };
 P.editDelivery=function(docId){
@@ -965,6 +990,7 @@ P.editDelivery=function(docId){
       <div><label class="fl">Weight (lbs)</label><input type="number" id="ed-weight" value="${d.weight||''}"></div>
       <div><label class="fl">Drop Ship?</label><select id="ed-ds"><option value="No" ${d.dropShip!=='Yes'?'selected':''}>No</option><option value="Yes" ${d.dropShip==='Yes'?'selected':''}>Yes</option></select></div>
       <div><label class="fl">Drop Ship Company</label><input id="ed-dsco" value="${d.dropShipCompany||''}"></div>
+      <div class="s2"><label class="fl">Notes</label><input id="ed-notes" value="${d.notes||''}" placeholder='e.g. Driver to pick up check, call ahead, etc.'></div>
     </div>
     <div style="display:flex;gap:8px;margin-top:14px;">
       <button class="btn btn-primary" onclick="P.saveEditDelivery('${docId}')">Save</button>
@@ -973,11 +999,131 @@ P.editDelivery=function(docId){
 };
 P.saveEditDelivery=async(docId)=>{
   const truck=document.getElementById('ed-truck').value;
-  await updateDoc(doc(db,'deliveries',docId),{truck,date:document.getElementById('ed-date').value,customer:document.getElementById('ed-customer').value.trim(),city:document.getElementById('ed-city').value.trim(),btRef:document.getElementById('ed-ref').value.trim(),weight:document.getElementById('ed-weight').value,dropShip:document.getElementById('ed-ds').value,dropShipCompany:document.getElementById('ed-dsco').value.trim(),status:truck==='Unassigned'?'Unassigned':'Scheduled'});
+  await updateDoc(doc(db,'deliveries',docId),{truck,date:document.getElementById('ed-date').value,customer:document.getElementById('ed-customer').value.trim(),city:document.getElementById('ed-city').value.trim(),btRef:document.getElementById('ed-ref').value.trim(),weight:document.getElementById('ed-weight').value,dropShip:document.getElementById('ed-ds').value,dropShipCompany:document.getElementById('ed-dsco').value.trim(),notes:document.getElementById('ed-notes').value.trim(),status:truck==='Unassigned'?'Unassigned':'Scheduled'});
   toast(truck==='Unassigned'?'Updated':'Assigned to '+truck+'!');closeModal();renderCal();
+  const picker=document.getElementById('cal-export-date');if(picker?.value)P.renderDaySummary(picker.value);
 };
-P.deleteDelivery=async(docId)=>{if(!confirm('Remove delivery?'))return;await deleteDoc(doc(db,'deliveries',docId));toast('Removed','#991B1B');closeModal();renderCal();};
-document.getElementById('btn-add-del').onclick=()=>P.addDelivery('');
+P.deleteDelivery=async(docId)=>{if(!confirm('Remove delivery?'))return;await deleteDoc(doc(db,'deliveries',docId));toast('Removed','#991B1B');closeModal();renderCal();
+  const picker=document.getElementById('cal-export-date');if(picker?.value)P.renderDaySummary(picker.value);
+};
+document.getElementById('btn-add-del')&&(document.getElementById('btn-add-del').onclick=()=>P.addDelivery(''));
+
+P.selectCalDay=function(dateStr){
+  const picker=document.getElementById('cal-export-date');
+  if(picker){picker.value=dateStr;P.renderDaySummary(dateStr);}
+  const dayDels=deliveries.filter(d=>d.date===dateStr);
+  if(!dayDels.length)P.addDelivery(dateStr);
+};
+
+P.renderDaySummary=function(dateStr){
+  const dayDels=deliveries.filter(d=>d.date===dateStr);
+  const summary=document.getElementById('cal-day-summary');
+  if(!dayDels.length){summary.style.display='none';return;}
+  const unassigned=dayDels.filter(d=>d.truck==='Unassigned');
+  const allAssigned=unassigned.length===0;
+  const fmtd=new Date(dateStr+'T00:00:00').toLocaleDateString([],{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  // Group by truck
+  const byTruck={};
+  dayDels.forEach(d=>{
+    if(!byTruck[d.truck])byTruck[d.truck]=[];
+    byTruck[d.truck].push(d);
+  });
+  const truckColors={Gus:'#DBEAFE',JC:'#D1FAE5',Sergio:'#FEF3C7',Unassigned:'#FEE2E2'};
+  const truckText={Gus:'#1E40AF',JC:'#065F46',Sergio:'#92400E',Unassigned:'#991B1B'};
+  summary.style.display='block';
+  summary.innerHTML=`
+    <div class="form-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+        <div>
+          <span style="font-weight:600;font-size:14px;">${fmtd}</span>
+          <span style="font-size:12px;color:#666;margin-left:10px;">${dayDels.length} delivery${dayDels.length!==1?'s':''}</span>
+          ${allAssigned
+            ?'<span class="badge b-green" style="margin-left:8px;">✓ All assigned</span>'
+            :`<span class="badge b-red" style="margin-left:8px;">⚠ ${unassigned.length} unassigned</span>`}
+        </div>
+        ${allAssigned
+          ?`<button class="btn btn-success" onclick="P.exportDay('${dateStr}')">⬇ Export Route Sheet</button>`
+          :`<span style="font-size:12px;color:#999;">Assign all deliveries to enable export</span>`}
+      </div>
+      ${Object.entries(byTruck).map(([truck,dels])=>`
+        <div style="margin-bottom:14px;">
+          <div style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;background:${truckColors[truck]||'#f5f5f5'};color:${truckText[truck]||'#333'};font-weight:600;font-size:12px;margin-bottom:8px;">
+            🚛 ${truck} — ${dels.length} stop${dels.length!==1?'s':''}
+            ${dels.reduce((a,d)=>a+Number(d.weight||0),0)>0?` · ${dels.reduce((a,d)=>a+Number(d.weight||0),0).toLocaleString()} lbs total`:''}
+          </div>
+          <table class="tbl" style="font-size:12px;">
+            <thead><tr><th>#</th><th>SO / PO #</th><th>Customer</th><th>City</th><th>Weight</th><th>Drop Ship</th><th>Notes</th></tr></thead>
+            <tbody>
+              ${dels.map((d,i)=>`<tr>
+                <td style="color:#999;">${i+1}</td>
+                <td style="font-weight:500;">${d.so||'—'}</td>
+                <td>${d.customer||'—'}</td>
+                <td>${d.city||'—'}</td>
+                <td>${d.weight?Number(d.weight).toLocaleString()+' lbs':'—'}</td>
+                <td>${d.dropShip==='Yes'?`<span class="badge b-purple">Yes — ${d.dropShipCompany||''}</span>`:'No'}</td>
+                <td style="color:${d.notes?'#C2410C':'#ccc'};font-weight:${d.notes?'500':'400'}">${d.notes||'—'}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`).join('')}
+    </div>`;
+};
+
+P.exportDay=function(dateStr){
+  const dayDels=deliveries.filter(d=>d.date===dateStr);
+  if(!dayDels.length){toast('No deliveries for this date','#991B1B');return;}
+  const unassigned=dayDels.filter(d=>d.truck==='Unassigned');
+  if(unassigned.length>0){toast(`${unassigned.length} deliveries still unassigned!`,'#991B1B');return;}
+  const fmtd=new Date(dateStr+'T00:00:00').toLocaleDateString([],{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  // Group by truck
+  const byTruck={};
+  dayDels.forEach(d=>{if(!byTruck[d.truck])byTruck[d.truck]=[];byTruck[d.truck].push(d);});
+  // Build printable HTML
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>BT Route Sheet — ${fmtd}</title>
+  <style>
+    body{font-family:system-ui,sans-serif;padding:32px;color:#1a1a1a;font-size:13px;}
+    h1{font-size:20px;font-weight:700;margin-bottom:4px;}
+    .sub{color:#666;font-size:13px;margin-bottom:24px;}
+    .truck-section{margin-bottom:28px;page-break-inside:avoid;}
+    .truck-header{font-size:15px;font-weight:700;padding:8px 14px;border-radius:6px;margin-bottom:10px;display:inline-block;}
+    .gus{background:#DBEAFE;color:#1E40AF;}
+    .jc{background:#D1FAE5;color:#065F46;}
+    .sergio{background:#FEF3C7;color:#92400E;}
+    table{width:100%;border-collapse:collapse;font-size:12px;}
+    th{text-align:left;padding:7px 10px;border-bottom:2px solid #e5e5e5;font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.5px;}
+    td{padding:8px 10px;border-bottom:1px solid #f0f0f0;}
+    .stop-num{color:#999;font-weight:500;}
+    .footer{margin-top:32px;font-size:11px;color:#999;border-top:1px solid #e5e5e5;padding-top:12px;}
+    @media print{body{padding:16px;}@page{margin:1.5cm;}}
+  </style></head><body>
+  <h1>🚛 BT Route Sheet</h1>
+  <div class="sub">${fmtd} &nbsp;·&nbsp; ${dayDels.length} total deliveries &nbsp;·&nbsp; ${dayDels.reduce((a,d)=>a+Number(d.weight||0),0).toLocaleString()} lbs total</div>
+  ${Object.entries(byTruck).map(([truck,dels])=>`
+    <div class="truck-section">
+      <div class="truck-header ${truck.toLowerCase()}">${truck} — ${dels.length} stop${dels.length!==1?'s':''} · ${dels.reduce((a,d)=>a+Number(d.weight||0),0).toLocaleString()} lbs</div>
+      <table>
+        <thead><tr><th>#</th><th>SO / PO #</th><th>Customer</th><th>City</th><th>Weight</th><th>Drop Ship</th><th>Notes</th></tr></thead>
+        <tbody>
+          ${dels.map((d,i)=>`<tr>
+            <td class="stop-num">${i+1}</td>
+            <td><strong>${d.so||'—'}</strong></td>
+            <td>${d.customer||'—'}</td>
+            <td>${d.city||'—'}</td>
+            <td>${d.weight?Number(d.weight).toLocaleString()+' lbs':'—'}</td>
+            <td>${d.dropShip==='Yes'?`Drop ship: ${d.dropShipCompany||''}`:''}</td>
+            <td style="${d.notes?'color:#C2410C;font-weight:500;':'color:#999;'}">${d.notes||''}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`).join('')}
+  <div class="footer">Bergsen Portal · Generated ${new Date().toLocaleString()} · BT Route Sheet for ${fmtd}</div>
+  </body></html>`;
+  // Open in new tab for printing/saving
+  const win=window.open('','_blank');
+  win.document.write(html);
+  win.document.close();
+  setTimeout(()=>win.print(),500);
+};
 
 // TASKS
 P.renderTasks=function(){
@@ -1023,7 +1169,7 @@ P.renderTasks=function(){
 };
 P.completeTask=async(docId)=>{await updateDoc(doc(db,'tasks',docId),{complete:true,completedAt:Date.now()});toast('Task complete!');};
 P.deleteTask=async(docId)=>{if(!confirm('Delete task?'))return;await deleteDoc(doc(db,'tasks',docId));toast('Deleted','#991B1B');};
-document.getElementById('btn-new-task').onclick=function(){
+function openNewTask(){
   const spOpts=settings.sps.map(s=>`<option value="${s.init}">${s.init}</option>`).join('');
   openModal('New Task',`
     <div class="form-grid">
@@ -1036,7 +1182,7 @@ document.getElementById('btn-new-task').onclick=function(){
     </div>
     <div style="margin-top:14px;"><button class="btn btn-primary" onclick="P.saveTask()">Create & notify</button></div>
     <div id="tk-msg" style="font-size:12px;margin-top:8px;"></div>`);
-};
+}
 P.saveTask=async function(){
   const title=document.getElementById('tk-title').value.trim();
   const to=document.getElementById('tk-to').value;
@@ -1129,30 +1275,37 @@ document.getElementById('btn-add-sp').onclick=async function(){
 };
 P.removeSP=async(i)=>{if(!confirm(`Remove ${settings.sps[i].init}?`))return;settings.sps.splice(i,1);await saveSettings();populateDropdowns();};
 P.updateSPEmail=async(i,val)=>{settings.sps[i].email=val;await saveSettings();};
-document.getElementById('btn-add-carrier').onclick=async function(){
+P.removeCarrier=async(i)=>{settings.carriers.splice(i,1);await saveSettings();populateDropdowns();};
+P.removeTruck=async(i)=>{settings.trucks.splice(i,1);await saveSettings();populateDropdowns();};
+P.updateTruck=async(i,val)=>{settings.trucks[i]=val;await saveSettings();};
+
+async function addSP(){
+  const init=document.getElementById('new-sp-init').value.trim().toUpperCase();
+  const email=document.getElementById('new-sp-email').value.trim();
+  const msg=document.getElementById('sp-msg');
+  if(!init||!email){msg.style.color='#991B1B';msg.textContent='Both required.';return;}
+  if(settings.sps.find(s=>s.init===init)){msg.style.color='#991B1B';msg.textContent='Already exists.';return;}
+  settings.sps.push({init,email});await saveSettings();populateDropdowns();
+  document.getElementById('new-sp-init').value='';document.getElementById('new-sp-email').value='';
+  msg.style.color='#065F46';msg.textContent=`${init} added!`;setTimeout(()=>msg.textContent='',2000);
+}
+async function addCarrier(){
   const c=document.getElementById('new-carrier').value.trim();if(!c)return;
   if(settings.carriers.includes(c)){toast('Already exists','#991B1B');return;}
   settings.carriers.push(c);await saveSettings();document.getElementById('new-carrier').value='';populateDropdowns();toast('Carrier added!');
-};
-P.removeCarrier=async(i)=>{settings.carriers.splice(i,1);await saveSettings();populateDropdowns();};
-document.getElementById('btn-add-truck').onclick=async function(){
+}
+async function addTruck(){
   const t=document.getElementById('new-truck').value.trim();if(!t)return;
   settings.trucks.push(t);await saveSettings();document.getElementById('new-truck').value='';populateDropdowns();toast('Truck added!');
-};
-P.removeTruck=async(i)=>{settings.trucks.splice(i,1);await saveSettings();populateDropdowns();};
-P.updateTruck=async(i,val)=>{settings.trucks[i]=val;await saveSettings();};
-document.getElementById('btn-change-pass').onclick=async function(){
+}
+async function changePass(){
   const np=document.getElementById('new-pass').value;const cp=document.getElementById('confirm-pass').value;
   const msg=document.getElementById('pass-msg');
   if(np.length<6){msg.style.color='#991B1B';msg.textContent='Min 6 chars.';return;}
   if(np!==cp){msg.style.color='#991B1B';msg.textContent='No match.';return;}
   settings.passwordHash=hashPass(np);await saveSettings();
   msg.style.color='#065F46';msg.textContent='Updated!';setTimeout(()=>msg.textContent='',2000);
-};
-
-// MODAL
-document.getElementById('modal-close').onclick=closeModal;
-document.getElementById('modal-overlay').onclick=e=>{if(e.target===document.getElementById('modal-overlay'))closeModal();};
+}
 
 // Expose P globally for inline handlers
 window.P=P;
