@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bergsen Portal</title>
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAav7nvKb66DTyNqcbl4HK0JmJ9PCrKBKU&libraries=places"></script>
+<script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAav7nvKb66DTyNqcbl4HK0JmJ9PCrKBKU&libraries=places"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:system-ui,-apple-system,sans-serif;background:#f0f2f5;color:#1a1a1a;font-size:14px;min-height:100vh;}
@@ -327,10 +327,13 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:#0f3460;}
               <input type="date" id="cal-export-date" style="font-size:12px;padding:5px 8px;width:auto;">
             </div>
             <button class="btn btn-success" style="font-size:12px;" id="btn-export-day">⬇ Export Day</button>
+            <button class="btn" style="font-size:12px;background:#6B21A8;color:#fff;border-color:#6B21A8;" id="btn-auto-route">🗺 Auto-Route</button>
             <button class="btn btn-primary" style="font-size:12px;" id="btn-add-del">+ Add delivery</button>
           </div>
         </div>
         <div class="cal-grid" id="cal-grid"></div>
+        <!-- Auto-route panel -->
+        <div id="auto-route-panel" style="display:none;margin-top:16px;"></div>
         <!-- Daily summary panel -->
         <div id="cal-day-summary" style="display:none;margin-top:16px;"></div>
       </div>
@@ -410,7 +413,14 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:#0f3460;}
           </div>
         </div>
         <div class="settings-sec">
-          <div class="settings-title">Change password</div>
+          <div class="settings-title">🗺 RouteXL credentials</div>
+          <p style="font-size:12px;color:#666;margin-bottom:10px;">Used for automatic route optimization. Register free at routexl.com</p>
+          <div class="form-grid">
+            <div><label class="fl">RouteXL Username</label><input id="rx-user" placeholder="Your RouteXL username" oninput="P.saveRXCreds()"></div>
+            <div><label class="fl">RouteXL Password</label><input type="password" id="rx-pass" placeholder="Your RouteXL password" oninput="P.saveRXCreds()"></div>
+          </div>
+          <div id="rx-msg" style="font-size:12px;margin-top:6px;color:#065F46;min-height:14px;"></div>
+        </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
             <div><label class="fl">New password</label><input type="password" id="new-pass" style="max-width:180px;"></div>
             <div><label class="fl">Confirm</label><input type="password" id="confirm-pass" style="max-width:180px;"></div>
@@ -466,7 +476,7 @@ const sawJobsRef=collection(db,'jobs');// shared with saw app
 
 // STATE
 let orders=[],shipments=[],deliveries=[],tasks=[];
-let settings={passwordHash:null,warehouseAddress:'',customers:[],sps:[
+let settings={passwordHash:null,warehouseAddress:'',routeXLUser:'',routeXLPass:'',customers:[],sps:[
   {init:'NC',email:'nicolec@bergsen.com'},{init:'HM',email:'hollim@bergsen.com'},
   {init:'MT',email:'miket@bergsen.com'},{init:'TD',email:'tomd@bergsen.com'},
   {init:'MR',email:'mrim@bergsen.com'},{init:'IC',email:'israelc@bergsen.com'},
@@ -546,6 +556,11 @@ function showPortal(){
   document.getElementById('btn-add-ship').onclick=openAddShipment;
   document.getElementById('cal-prev').onclick=()=>{calMonth--;if(calMonth<0){calMonth=11;calYear--;}renderCal();};
   document.getElementById('cal-next').onclick=()=>{calMonth++;if(calMonth>11){calMonth=0;calYear++;}renderCal();};
+  document.getElementById('btn-auto-route').onclick=()=>{
+    const d=document.getElementById('cal-export-date').value;
+    if(d)P.showAutoRoute(d);
+    else toast('Please select a date first','#991B1B');
+  };
   document.getElementById('btn-add-del').onclick=()=>P.addDelivery('');
   document.getElementById('cal-export-date').value=new Date().toISOString().split('T')[0];
   document.getElementById('cal-export-date').addEventListener('change',function(){P.renderDaySummary(this.value);});
@@ -1027,6 +1042,8 @@ P.saveDelivery=async function(){
 };
 P.editDelivery=function(docId){
   const d=deliveries.find(d=>d.docId===docId);if(!d)return;
+  // Auto-lookup address from address book if not already on the delivery
+  const knownAddr=d.address||findCustomerAddress(d.customer)||'';
   openModal('Edit BT Delivery — '+d.so,`
     <div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#92400E;">
       ${d.truck==='Unassigned'?'⚠ Not yet assigned — assign a truck below':'🚛 Assigned to <strong>'+d.truck+'</strong>'}
@@ -1034,8 +1051,15 @@ P.editDelivery=function(docId){
     <div class="form-grid">
       <div><label class="fl">Assign Truck</label><select id="ed-truck">${['Unassigned',...settings.trucks].map(t=>`<option value="${t}" ${t===d.truck?'selected':''}>${t}</option>`).join('')}</select></div>
       <div><label class="fl">Delivery Date</label><input type="date" id="ed-date" value="${d.date||''}"></div>
-      <div><label class="fl">Customer</label><input id="ed-customer" value="${d.customer||''}"></div>
+      <div><label class="fl">Customer</label><input id="ed-customer" value="${d.customer||''}" oninput="P.autoFillAddress()"></div>
       <div><label class="fl">City</label><input id="ed-city" value="${d.city||''}"></div>
+      <div class="s2">
+        <label class="fl">Full address <span style="color:#999;font-weight:400;">(used for Google Maps routing)</span></label>
+        <div style="display:flex;gap:6px;">
+          <input id="ed-address" value="${knownAddr}" placeholder="Street, City, State ZIP" style="flex:1;">
+          ${knownAddr?`<span style="align-self:center;font-size:11px;color:#065F46;white-space:nowrap;">✓ From address book</span>`:''}
+        </div>
+      </div>
       <div><label class="fl">SO # / PO #</label><input id="ed-ref" value="${d.btRef||d.so||''}"></div>
       <div><label class="fl">Weight (lbs)</label><input type="number" id="ed-weight" value="${d.weight||''}"></div>
       <div><label class="fl">Drop Ship?</label><select id="ed-ds"><option value="No" ${d.dropShip!=='Yes'?'selected':''}>No</option><option value="Yes" ${d.dropShip==='Yes'?'selected':''}>Yes</option></select></div>
@@ -1047,16 +1071,52 @@ P.editDelivery=function(docId){
       <button class="btn btn-danger" onclick="P.deleteDelivery('${docId}')">Remove</button>
     </div>`);
 };
+
+// Auto-fill address when customer name is changed in edit modal
+P.autoFillAddress=function(){
+  const name=document.getElementById('ed-customer')?.value.trim();
+  const addrField=document.getElementById('ed-address');
+  if(!name||!addrField||addrField.value)return;
+  const addr=findCustomerAddress(name);
+  if(addr){
+    addrField.value=addr;
+    addrField.style.background='#F0FDF4';
+    setTimeout(()=>addrField.style.background='',2000);
+  }
+};
+
 P.saveEditDelivery=async(docId)=>{
   const truck=document.getElementById('ed-truck').value;
-  await updateDoc(doc(db,'deliveries',docId),{truck,date:document.getElementById('ed-date').value,customer:document.getElementById('ed-customer').value.trim(),city:document.getElementById('ed-city').value.trim(),btRef:document.getElementById('ed-ref').value.trim(),weight:document.getElementById('ed-weight').value,dropShip:document.getElementById('ed-ds').value,dropShipCompany:document.getElementById('ed-dsco').value.trim(),notes:document.getElementById('ed-notes').value.trim(),status:truck==='Unassigned'?'Unassigned':'Scheduled'});
-  toast(truck==='Unassigned'?'Updated':'Assigned to '+truck+'!');closeModal();renderCal();
+  const customer=document.getElementById('ed-customer').value.trim();
+  const address=document.getElementById('ed-address').value.trim();
+  await updateDoc(doc(db,'deliveries',docId),{
+    truck,
+    date:document.getElementById('ed-date').value,
+    customer,
+    city:document.getElementById('ed-city').value.trim(),
+    address,
+    btRef:document.getElementById('ed-ref').value.trim(),
+    weight:document.getElementById('ed-weight').value,
+    dropShip:document.getElementById('ed-ds').value,
+    dropShipCompany:document.getElementById('ed-dsco').value.trim(),
+    notes:document.getElementById('ed-notes').value.trim(),
+    status:truck==='Unassigned'?'Unassigned':'Scheduled'
+  });
+  // Auto-save address to address book if new
+  if(address&&customer&&!(settings.customers||[]).find(c=>c.name.toLowerCase()===customer.toLowerCase())){
+    if(!settings.customers)settings.customers=[];
+    settings.customers.push({name:customer,address});
+    await saveSettings();
+    toast(truck==='Unassigned'?'Updated + address saved!':'Assigned to '+truck+' + address saved!');
+  } else {
+    toast(truck==='Unassigned'?'Updated':'Assigned to '+truck+'!');
+  }
+  closeModal();renderCal();
   const picker=document.getElementById('cal-export-date');if(picker?.value)P.renderDaySummary(picker.value);
 };
 P.deleteDelivery=async(docId)=>{if(!confirm('Remove delivery?'))return;await deleteDoc(doc(db,'deliveries',docId));toast('Removed','#991B1B');closeModal();renderCal();
   const picker=document.getElementById('cal-export-date');if(picker?.value)P.renderDaySummary(picker.value);
 };
-document.getElementById('btn-add-del')&&(document.getElementById('btn-add-del').onclick=()=>P.addDelivery(''));
 
 P.selectCalDay=function(dateStr){
   const picker=document.getElementById('cal-export-date');
@@ -1331,7 +1391,284 @@ P.suggestAddress=function(custFieldId,addrFieldId){
   }
 };
 
-// ── ADDRESS BOOK ──────────────────────────────────────────
+// ── GEOCODING ─────────────────────────────────────────────
+const MAPS_KEY='AIzaSyAav7nvKb66DTyNqcbl4HK0JmJ9PCrKBKU';
+const WAREHOUSE_LAT=33.93665410552897;
+const WAREHOUSE_LNG=-118.07065790350524;
+
+async function geocodeAddress(address){
+  try{
+    const url=`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${MAPS_KEY}`;
+    const res=await fetch(url);
+    if(!res.ok)return null;
+    const data=await res.json();
+    if(data.status==='OK'&&data.results[0]){
+      const loc=data.results[0].geometry.location;
+      return{lat:loc.lat,lng:loc.lng,formattedAddress:data.results[0].formatted_address};
+    }
+  }catch(e){console.error('Geocode failed:',e);}
+  return null;
+}
+
+// ── K-MEANS CLUSTERING ────────────────────────────────────
+function kMeansCluster(stops,k){
+  if(stops.length<=k) return stops.map(s=>[s]);
+  // Init centroids from stops spread evenly
+  let centroids=[];
+  const step=Math.floor(stops.length/k);
+  for(let i=0;i<k;i++) centroids.push({lat:stops[i*step].lat,lng:stops[i*step].lng});
+  let clusters=[];
+  for(let iter=0;iter<20;iter++){
+    clusters=Array.from({length:k},()=>[]);
+    stops.forEach(s=>{
+      let best=0,bestDist=Infinity;
+      centroids.forEach((c,i)=>{
+        const d=Math.pow(s.lat-c.lat,2)+Math.pow(s.lng-c.lng,2);
+        if(d<bestDist){bestDist=d;best=i;}
+      });
+      clusters[best].push(s);
+    });
+    // Recalculate centroids
+    centroids=clusters.map(cl=>{
+      if(!cl.length) return{lat:0,lng:0};
+      return{lat:cl.reduce((a,s)=>a+s.lat,0)/cl.length,lng:cl.reduce((a,s)=>a+s.lng,0)/cl.length};
+    });
+  }
+  // Balance by weight — move heavy stops between clusters if imbalanced
+  return balanceClusters(clusters);
+}
+
+function balanceClusters(clusters){
+  const totalWeight=clusters.flat().reduce((a,s)=>a+Number(s.weight||0),0);
+  const targetWeight=totalWeight/clusters.length;
+  const totalStops=clusters.flat().length;
+  const targetStops=Math.ceil(totalStops/clusters.length);
+  // Simple balancing — move outlier stops to lighter clusters
+  for(let pass=0;pass<5;pass++){
+    for(let i=0;i<clusters.length;i++){
+      for(let j=0;j<clusters.length;j++){
+        if(i===j) continue;
+        const wi=clusters[i].reduce((a,s)=>a+Number(s.weight||0),0);
+        const wj=clusters[j].reduce((a,s)=>a+Number(s.weight||0),0);
+        if(clusters[i].length>targetStops+1&&clusters[j].length<targetStops){
+          clusters[j].push(clusters[i].pop());
+        }
+      }
+    }
+  }
+  return clusters;
+}
+
+// ── ROUTEXL OPTIMIZATION ──────────────────────────────────
+async function optimizeWithRouteXL(stops,rxUser,rxPass){
+  // Build locations object for RouteXL
+  const locations={};
+  // Add warehouse as start
+  locations['0']={name:'Warehouse',lat:WAREHOUSE_LAT,lng:WAREHOUSE_LNG};
+  stops.forEach((s,i)=>{
+    locations[String(i+1)]={name:s.customer||s.so,lat:s.lat,lng:s.lng};
+  });
+  try{
+    const creds=btoa(`${rxUser}:${rxPass}`);
+    const res=await fetch('https://api.routexl.com/tour',{
+      method:'POST',
+      headers:{'Authorization':`Basic ${creds}`,'Content-Type':'application/x-www-form-urlencoded'},
+      body:`locations=${encodeURIComponent(JSON.stringify(locations))}`
+    });
+    const data=await res.json();
+    if(data.route){
+      // Reorder stops based on RouteXL response (skip index 0 = warehouse)
+      const order=Object.values(data.route).map(r=>r.name).filter(n=>n!=='Warehouse');
+      const ordered=order.map(name=>stops.find(s=>(s.customer||s.so)===name)||stops.find(s=>s.so===name)).filter(Boolean);
+      // Add any stops not returned by RouteXL at end
+      const missing=stops.filter(s=>!ordered.includes(s));
+      return{orderedStops:[...ordered,...missing],success:true};
+    }
+  }catch(e){console.error('RouteXL failed:',e);}
+  return{orderedStops:stops,success:false};
+}
+// ── END ROUTING ───────────────────────────────────────────
+P.saveRXCreds=async function(){
+  settings.routeXLUser=document.getElementById('rx-user')?.value.trim()||'';
+  settings.routeXLPass=document.getElementById('rx-pass')?.value||'';
+  await saveSettings();
+  const msg=document.getElementById('rx-msg');
+  if(msg){msg.textContent='✓ Saved';setTimeout(()=>msg.textContent='',2000);}
+};
+
+P.showAutoRoute=async function(dateStr){
+  const panel=document.getElementById('auto-route-panel');
+  if(!panel)return;
+  const allDels=deliveries.filter(d=>d.date===dateStr);
+  const fmtd=new Date(dateStr+'T00:00:00').toLocaleDateString([],{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  if(!allDels.length){toast('No deliveries for this date','#991B1B');return;}
+  if(!settings.routeXLUser||!settings.routeXLPass){
+    panel.style.display='block';
+    panel.innerHTML=`<div class="form-card" style="border-color:#FCD34D;">
+      <div style="font-weight:600;margin-bottom:8px;">⚠ RouteXL credentials required</div>
+      <p style="font-size:13px;color:#666;">Go to <strong>Settings → RouteXL credentials</strong> and enter your username and password first.</p>
+    </div>`;
+    return;
+  }
+  panel.style.display='block';
+  panel.innerHTML=`<div class="form-card"><div style="font-size:14px;font-weight:600;margin-bottom:4px;">🗺 Auto-Route — ${fmtd}</div>
+    <div style="font-size:13px;color:#666;margin-bottom:14px;">${allDels.length} deliveries · Geocoding addresses and optimizing routes...</div>
+    <div id="ar-progress" style="font-size:12px;color:#1E40AF;">⟳ Starting...</div>
+  </div>`;
+
+  const progress=document.getElementById('ar-progress');
+
+  // Step 1 — Geocode any stops missing coordinates
+  progress.textContent='⟳ Geocoding delivery addresses...';
+  const enriched=[];
+  for(const d of allDels){
+    let lat=null,lng=null;
+    // Try address book first
+    const coords=findCustomerCoords(d.customer);
+    if(coords){lat=coords.lat;lng=coords.lng;}
+    else if(d.address||d.city){
+      const addr=d.address||(d.city+', CA');
+      const geo=await geocodeAddress(addr);
+      if(geo){lat=geo.lat;lng=geo.lng;
+        // Save to address book automatically
+        if(d.customer&&!(settings.customers||[]).find(c=>c.name.toLowerCase()===d.customer.toLowerCase())){
+          if(!settings.customers)settings.customers=[];
+          settings.customers.push({name:d.customer,address:addr,lat:geo.lat,lng:geo.lng,formattedAddress:geo.formattedAddress});
+          await saveSettings();
+        }
+      }
+    }
+    enriched.push({...d,lat:lat||WAREHOUSE_LAT,lng:lng||WAREHOUSE_LNG,hasCoords:!!(lat&&lng)});
+  }
+
+  const missingCoords=enriched.filter(d=>!d.hasCoords).length;
+  if(missingCoords>0){
+    progress.innerHTML=`<span style="color:#B45309;">⚠ ${missingCoords} stop${missingCoords>1?'s':''} could not be geocoded — using approximate location. Add full addresses to the address book for better accuracy.</span>`;
+    await new Promise(r=>setTimeout(r,2000));
+  }
+
+  // Step 2 — Show truck count selector
+  const truckCount=settings.trucks.length;
+  panel.innerHTML=`<div class="form-card">
+    <div style="font-size:14px;font-weight:600;margin-bottom:4px;">🗺 Auto-Route — ${fmtd}</div>
+    <div style="font-size:13px;color:#666;margin-bottom:16px;">${allDels.length} stops ready to optimize</div>
+    <div style="margin-bottom:16px;">
+      <label class="fl">How many trucks today?</label>
+      <div style="display:flex;gap:8px;margin-top:6px;">
+        ${settings.trucks.slice(0,3).map((t,i)=>`
+          <button class="btn ${i===0?'btn-primary':''}" id="ar-truck-btn-${i+1}" onclick="P.setARTrucks(${i+1},${allDels.length})"
+            style="font-size:13px;min-width:60px;">
+            ${i+1} ${i===0?'Truck':'Trucks'}
+          </button>`).join('')}
+      </div>
+    </div>
+    <div id="ar-split-preview" style="margin-top:8px;"></div>
+    <div id="ar-action-row" style="display:none;margin-top:14px;display:flex;gap:10px;">
+      <button class="btn" style="background:#6B21A8;color:#fff;border-color:#6B21A8;font-size:13px;" id="ar-optimize-btn">⟳ Optimize with RouteXL</button>
+      <button class="btn" onclick="document.getElementById('auto-route-panel').style.display='none'">Cancel</button>
+    </div>
+    <div id="ar-result" style="margin-top:12px;"></div>
+  </div>`;
+
+  // Store enriched stops for use in optimize step
+  window._arStops=enriched;
+  window._arDate=dateStr;
+  P.setARTrucks(Math.min(allDels.length,truckCount),allDels.length);
+};
+
+P.setARTrucks=function(n,total){
+  // Update button styles
+  for(let i=1;i<=3;i++){
+    const btn=document.getElementById(`ar-truck-btn-${i}`);
+    if(btn)btn.className=`btn ${i===n?'btn-primary':''}`;
+  }
+  window._arTruckCount=n;
+  const preview=document.getElementById('ar-split-preview');
+  if(!preview)return;
+  const stops=window._arStops||[];
+  const perTruck=Math.ceil(stops.length/n);
+  const trucks=settings.trucks.slice(0,n);
+  const colors=['#DBEAFE','#D1FAE5','#FEF3C7'];
+  const textColors=['#1E40AF','#065F46','#92400E'];
+  preview.innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap;">
+    ${trucks.map((t,i)=>`
+      <div style="background:${colors[i]};color:${textColors[i]};padding:8px 14px;border-radius:8px;font-size:12px;font-weight:500;">
+        🚛 ${t}: ~${Math.ceil(stops.length/n)} stops
+      </div>`).join('')}
+  </div>
+  <p style="font-size:12px;color:#666;margin-top:8px;">RouteXL will cluster stops geographically and optimize driving order per truck.</p>`;
+  document.getElementById('ar-action-row').style.display='flex';
+  document.getElementById('ar-optimize-btn').onclick=()=>P.runAutoRoute();
+};
+
+P.runAutoRoute=async function(){
+  const stops=window._arStops||[];
+  const n=window._arTruckCount||1;
+  const dateStr=window._arDate;
+  const result=document.getElementById('ar-result');
+  const btn=document.getElementById('ar-optimize-btn');
+  if(!result||!btn)return;
+  btn.textContent='⟳ Optimizing...';btn.disabled=true;
+  // Step 1: K-means cluster by geography + weight
+  const clusters=kMeansCluster(stops,n);
+  result.innerHTML='<div style="font-size:12px;color:#1E40AF;">⟳ Sending to RouteXL...</div>';
+  // Step 2: RouteXL optimize each cluster
+  const truckNames=settings.trucks.slice(0,n);
+  const optimizedClusters=[];
+  for(let i=0;i<clusters.length;i++){
+    const cluster=clusters[i];
+    if(!cluster.length)continue;
+    result.innerHTML=`<div style="font-size:12px;color:#1E40AF;">⟳ Optimizing ${truckNames[i]}'s route (${cluster.length} stops)...</div>`;
+    const opt=await optimizeWithRouteXL(cluster,settings.routeXLUser,settings.routeXLPass);
+    optimizedClusters.push({truck:truckNames[i],stops:opt.orderedStops,success:opt.success});
+  }
+  // Step 3: Show result with confirm button
+  const colors=['#DBEAFE','#D1FAE5','#FEF3C7'];
+  const textColors=['#1E40AF','#065F46','#92400E'];
+  result.innerHTML=`
+    <div style="font-weight:600;font-size:14px;margin-bottom:12px;">✓ Routes optimized — review and confirm</div>
+    ${optimizedClusters.map((c,i)=>{
+      const mapsLink=buildGoogleMapsLink(`${WAREHOUSE_LAT},${WAREHOUSE_LNG}`,c.stops);
+      return `<div style="background:${colors[i]};border-radius:8px;padding:12px 14px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-weight:600;color:${textColors[i]};">🚛 ${c.truck} — ${c.stops.length} stops</span>
+          <a href="${mapsLink}" target="_blank" style="font-size:11px;color:${textColors[i]};font-weight:500;">📍 Preview in Maps</a>
+        </div>
+        <div style="font-size:12px;color:${textColors[i]};">
+          ${c.stops.map((s,j)=>`<span style="margin-right:8px;">${j+1}. ${s.customer||s.so}</span>`).join('')}
+        </div>
+        ${!c.success?`<div style="font-size:11px;color:#B45309;margin-top:4px;">⚠ RouteXL unavailable — using geographic clustering only</div>`:''}
+      </div>`;
+    }).join('')}
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn btn-success" onclick="P.confirmAutoRoute(${JSON.stringify(optimizedClusters.map(c=>({truck:c.truck,docIds:c.stops.map(s=>s.docId)})))})">✓ Confirm & Assign Trucks</button>
+      <button class="btn" onclick="P.runAutoRoute()">⟳ Re-optimize</button>
+      <button class="btn" onclick="document.getElementById('auto-route-panel').style.display='none'">Cancel</button>
+    </div>`;
+  btn.textContent='⟳ Optimize with RouteXL';btn.disabled=false;
+};
+
+P.confirmAutoRoute=async function(assignments){
+  try{
+    const batch=writeBatch(db);
+    assignments.forEach(a=>{
+      a.docIds.forEach(docId=>{
+        batch.update(doc(db,'deliveries',docId),{truck:a.truck,status:'Scheduled'});
+      });
+    });
+    await batch.commit();
+    document.getElementById('auto-route-panel').style.display='none';
+    toast(`✓ Routes assigned to ${assignments.map(a=>a.truck).join(', ')}!`);
+    renderCal();
+  }catch(e){toast('Error assigning trucks: '+e.message,'#991B1B');}
+};
+
+function buildGoogleMapsLink(origin,stops){
+  const base='https://www.google.com/maps/dir/';
+  const pts=[encodeURIComponent(typeof origin==='string'?origin:`${origin.lat},${origin.lng}`),...stops.map(s=>encodeURIComponent(s.address||(s.lat?`${s.lat},${s.lng}`:(s.city||s.customer))))].join('/');
+  return base+pts;
+}
+
 P.saveWarehouseAddress=async function(){
   const addr=document.getElementById('wh-street')?.value.trim();
   if(addr===undefined)return;
@@ -1351,6 +1688,7 @@ P.renderAddressBook=function(){
       <div style="flex:1;">
         <span style="font-weight:500;font-size:13px;">${c.name}</span>
         <span style="font-size:12px;color:#666;margin-left:10px;">📍 ${c.address}</span>
+        ${c.lat?`<span style="font-size:11px;color:#065F46;margin-left:6px;">✓ Geocoded</span>`:`<span style="font-size:11px;color:#B45309;margin-left:6px;"><a href="#" onclick="event.preventDefault();P.geocodeCustomer(${i})" style="color:#B45309;">⟳ Geocode</a></span>`}
       </div>
       <button class="btn btn-danger" style="font-size:11px;padding:2px 8px;" onclick="P.removeCustomer(${i})">Remove</button>
     </div>`).join('');
@@ -1361,51 +1699,42 @@ P.removeCustomer=async function(i){
   await saveSettings();P.renderAddressBook();
 };
 
+P.geocodeCustomer=async function(i){
+  const c=settings.customers[i];if(!c)return;
+  toast('Geocoding...','#1E40AF');
+  const result=await geocodeAddress(c.address);
+  if(result){
+    settings.customers[i].lat=result.lat;
+    settings.customers[i].lng=result.lng;
+    settings.customers[i].formattedAddress=result.formattedAddress;
+    await saveSettings();
+    toast(`✓ ${c.name} geocoded!`);
+    P.renderAddressBook();
+  } else {
+    toast('Geocoding failed — check the address','#991B1B');
+  }
+};
+
 function findCustomerAddress(name){
   if(!name||!settings.customers)return null;
-  const match=settings.customers.find(c=>c.name.toLowerCase()===name.toLowerCase()||name.toLowerCase().includes(c.name.toLowerCase()));
-  return match?match.address:null;
+  const m=settings.customers.find(c=>c.name.toLowerCase()===name.toLowerCase()||name.toLowerCase().includes(c.name.toLowerCase()));
+  return m?m.address:null;
 }
 
-// ── GOOGLE MAPS ROUTING ───────────────────────────────────
-const MAPS_KEY='AIzaSyAav7nvKb66DTyNqcbl4HK0JmJ9PCrKBKU';
-
-async function optimizeRoute(origin,stops){
-  // Use Google Maps Directions API with waypoints optimize
-  if(!stops.length)return{orderedStops:stops,totalDuration:'',totalDistance:''};
-  const waypoints=stops.slice(0,-1).map(s=>`via:${encodeURIComponent(s.address||s.city)}`).join('|');
-  const destination=encodeURIComponent(stops[stops.length-1].address||stops[stops.length-1].city);
-  const url=`https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${destination}&waypoints=optimize:true|${stops.map(s=>encodeURIComponent(s.address||s.city+', CA')).join('|')}&key=${MAPS_KEY}`;
-  try{
-    const res=await fetch(`https://cors-anywhere.herokuapp.com/${url}`);
-    const data=await res.json();
-    if(data.status==='OK'&&data.routes[0]){
-      const order=data.routes[0].waypoint_order;
-      const orderedStops=order.map(i=>stops[i]);
-      const legs=data.routes[0].legs;
-      const totalSecs=legs.reduce((a,l)=>a+l.duration.value,0);
-      const totalMeters=legs.reduce((a,l)=>a+l.distance.value,0);
-      const totalDuration=Math.round(totalSecs/60)+' min';
-      const totalDistance=(totalMeters/1609.34).toFixed(1)+' mi';
-      return{orderedStops,totalDuration,totalDistance};
-    }
-  }catch(e){console.log('Route optimization unavailable, using manual order');}
-  return{orderedStops:stops,totalDuration:'',totalDistance:''};
+function findCustomerCoords(name){
+  if(!name||!settings.customers)return null;
+  const m=settings.customers.find(c=>c.name.toLowerCase()===name.toLowerCase()||name.toLowerCase().includes(c.name.toLowerCase()));
+  return m&&m.lat?{lat:m.lat,lng:m.lng}:null;
 }
-
-function buildGoogleMapsLink(origin,stops){
-  const base='https://www.google.com/maps/dir/';
-  const points=[encodeURIComponent(origin),...stops.map(s=>encodeURIComponent(s.address||s.city))].join('/');
-  return base+points;
-}
-// ── END ROUTING ───────────────────────────────────────────
 
 // SETTINGS
 function renderSettingsLists(){
-  // Warehouse address
   const whEl=document.getElementById('wh-street');
   if(whEl&&settings.warehouseAddress)whEl.value=settings.warehouseAddress;
-  // Address book
+  const rxUser=document.getElementById('rx-user');
+  const rxPass=document.getElementById('rx-pass');
+  if(rxUser)rxUser.value=settings.routeXLUser||'';
+  if(rxPass)rxPass.value=settings.routeXLPass||'';
   P.renderAddressBook();
   // SPs
   document.getElementById('sp-list').innerHTML=settings.sps.map((s,i)=>`
@@ -1426,16 +1755,6 @@ function renderSettingsLists(){
       ${settings.trucks.length>1?`<button class="btn btn-danger" style="font-size:11px;padding:2px 8px;" onclick="P.removeTruck(${i})">Remove</button>`:''}
     </div>`).join('');
 }
-document.getElementById('btn-add-sp').onclick=async function(){
-  const init=document.getElementById('new-sp-init').value.trim().toUpperCase();
-  const email=document.getElementById('new-sp-email').value.trim();
-  const msg=document.getElementById('sp-msg');
-  if(!init||!email){msg.style.color='#991B1B';msg.textContent='Both required.';return;}
-  if(settings.sps.find(s=>s.init===init)){msg.style.color='#991B1B';msg.textContent='Already exists.';return;}
-  settings.sps.push({init,email});await saveSettings();populateDropdowns();
-  document.getElementById('new-sp-init').value='';document.getElementById('new-sp-email').value='';
-  msg.style.color='#065F46';msg.textContent=`${init} added!`;setTimeout(()=>msg.textContent='',2000);
-};
 P.removeSP=async(i)=>{if(!confirm(`Remove ${settings.sps[i].init}?`))return;settings.sps.splice(i,1);await saveSettings();populateDropdowns();};
 P.updateSPEmail=async(i,val)=>{settings.sps[i].email=val;await saveSettings();};
 P.removeCarrier=async(i)=>{settings.carriers.splice(i,1);await saveSettings();populateDropdowns();};
@@ -1473,7 +1792,16 @@ async function changePass(){
 // Expose P globally for inline handlers
 window.P=P;
 
-init();
+try{
+  init();
+}catch(e){
+  console.error('Portal init error:',e);
+  document.getElementById('auth-screen').innerHTML=`<div style="font-family:sans-serif;padding:40px;max-width:500px;margin:0 auto;text-align:center;">
+    <h2 style="color:#991B1B;margin-bottom:12px;">Portal failed to load</h2>
+    <p style="color:#666;margin-bottom:8px;">${e.message}</p>
+    <button onclick="location.reload()" style="margin-top:16px;padding:10px 20px;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;">Reload</button>
+  </div>`;
+}
 </script>
 </body>
 </html>
