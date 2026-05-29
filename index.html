@@ -1131,8 +1131,8 @@ P.renderDaySummary=function(dateStr){
   if(!dayDels.length){summary.style.display='none';return;}
   const unassigned=dayDels.filter(d=>d.truck==='Unassigned');
   const allAssigned=unassigned.length===0;
+  const missingAddr=dayDels.filter(d=>!d.address&&!findCustomerAddress(d.customer));
   const fmtd=new Date(dateStr+'T00:00:00').toLocaleDateString([],{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-  // Group by truck
   const byTruck={};
   dayDels.forEach(d=>{
     if(!byTruck[d.truck])byTruck[d.truck]=[];
@@ -1140,6 +1140,8 @@ P.renderDaySummary=function(dateStr){
   });
   const truckColors={Gus:'#DBEAFE',JC:'#D1FAE5',Sergio:'#FEF3C7',Unassigned:'#FEE2E2'};
   const truckText={Gus:'#1E40AF',JC:'#065F46',Sergio:'#92400E',Unassigned:'#991B1B'};
+  // Build address book datalist for autocomplete
+  const custOptions=(settings.customers||[]).map(c=>`<option value="${c.address}" data-name="${c.name}">${c.name} — ${c.address}</option>`).join('');
   summary.style.display='block';
   summary.innerHTML=`
     <div class="form-card">
@@ -1147,36 +1149,83 @@ P.renderDaySummary=function(dateStr){
         <div>
           <span style="font-weight:600;font-size:14px;">${fmtd}</span>
           <span style="font-size:12px;color:#666;margin-left:10px;">${dayDels.length} delivery${dayDels.length!==1?'s':''}</span>
-          ${allAssigned
-            ?'<span class="badge b-green" style="margin-left:8px;">✓ All assigned</span>'
-            :`<span class="badge b-red" style="margin-left:8px;">⚠ ${unassigned.length} unassigned</span>`}
+          ${allAssigned?'<span class="badge b-green" style="margin-left:8px;">✓ All assigned</span>':`<span class="badge b-red" style="margin-left:8px;">⚠ ${unassigned.length} unassigned</span>`}
+          ${missingAddr.length>0?`<span class="badge b-yellow" style="margin-left:6px;">⚠ ${missingAddr.length} missing address</span>`:'<span class="badge b-green" style="margin-left:6px;">✓ All addresses set</span>'}
         </div>
         ${allAssigned
           ?`<button class="btn btn-success" onclick="P.exportDay('${dateStr}')">⬇ Export Route Sheet</button>`
           :`<span style="font-size:12px;color:#999;">Assign all deliveries to enable export</span>`}
       </div>
+      <datalist id="addr-book-list">${custOptions}</datalist>
       ${Object.entries(byTruck).map(([truck,dels])=>`
-        <div style="margin-bottom:14px;">
+        <div style="margin-bottom:16px;">
           <div style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;background:${truckColors[truck]||'#f5f5f5'};color:${truckText[truck]||'#333'};font-weight:600;font-size:12px;margin-bottom:8px;">
             🚛 ${truck} — ${dels.length} stop${dels.length!==1?'s':''}
-            ${dels.reduce((a,d)=>a+Number(d.weight||0),0)>0?` · ${dels.reduce((a,d)=>a+Number(d.weight||0),0).toLocaleString()} lbs total`:''}
+            ${dels.reduce((a,d)=>a+Number(d.weight||0),0)>0?` · ${dels.reduce((a,d)=>a+Number(d.weight||0),0).toLocaleString()} lbs`:''}
           </div>
           <table class="tbl" style="font-size:12px;">
-            <thead><tr><th>#</th><th>SO / PO #</th><th>Customer</th><th>City</th><th>Weight</th><th>Drop Ship</th><th>Notes</th></tr></thead>
+            <thead><tr><th>#</th><th>SO / PO #</th><th>Customer</th><th>City</th><th>Address</th><th>Weight</th><th>Notes</th></tr></thead>
             <tbody>
-              ${dels.map((d,i)=>`<tr>
-                <td style="color:#999;">${i+1}</td>
-                <td style="font-weight:500;">${d.so||'—'}</td>
-                <td>${d.customer||'—'}</td>
-                <td>${d.city||'—'}</td>
-                <td>${d.weight?Number(d.weight).toLocaleString()+' lbs':'—'}</td>
-                <td>${d.dropShip==='Yes'?`<span class="badge b-purple">Yes — ${d.dropShipCompany||''}</span>`:'No'}</td>
-                <td style="color:${d.notes?'#C2410C':'#ccc'};font-weight:${d.notes?'500':'400'}">${d.notes||'—'}</td>
-              </tr>`).join('')}
+              ${dels.map((d,i)=>{
+                const resolvedAddr=d.address||findCustomerAddress(d.customer)||'';
+                const hasAddr=!!resolvedAddr;
+                return `<tr>
+                  <td style="color:#999;">${i+1}</td>
+                  <td style="font-weight:500;">${d.so||'—'}</td>
+                  <td>${d.customer||'—'}</td>
+                  <td>${d.city||'—'}</td>
+                  <td style="min-width:200px;">
+                    ${hasAddr
+                      ?`<div style="display:flex;align-items:center;gap:6px;">
+                          <span style="font-size:11px;color:#065F46;">✓</span>
+                          <span style="font-size:11px;color:#444;flex:1;">${resolvedAddr}</span>
+                          <button onclick="P.clearDeliveryAddr('${d.docId}','${dateStr}')" style="font-size:10px;color:#999;background:none;border:none;cursor:pointer;padding:0;">✕</button>
+                        </div>`
+                      :`<div style="display:flex;align-items:center;gap:4px;">
+                          <input
+                            list="addr-book-list"
+                            id="addr-input-${d.docId}"
+                            placeholder="Search address book or type..."
+                            style="font-size:11px;padding:4px 7px;border:1px solid #FCD34D;border-radius:4px;background:#FFFBEB;flex:1;min-width:160px;"
+                            oninput="P.previewAddr('${d.docId}')"
+                          >
+                          <button onclick="P.saveDeliveryAddr('${d.docId}','${dateStr}')" style="font-size:11px;padding:3px 8px;background:#065F46;color:#fff;border:none;border-radius:4px;cursor:pointer;white-space:nowrap;">Save</button>
+                        </div>`}
+                  </td>
+                  <td>${d.weight?Number(d.weight).toLocaleString()+' lbs':'—'}</td>
+                  <td style="color:${d.notes?'#C2410C':'#ccc'};font-weight:${d.notes?'500':'400'}">${d.notes||'—'}</td>
+                </tr>`;
+              }).join('')}
             </tbody>
           </table>
         </div>`).join('')}
     </div>`;
+};
+
+// Save address directly from day summary panel
+P.saveDeliveryAddr=async function(docId,dateStr){
+  const input=document.getElementById('addr-input-'+docId);
+  if(!input)return;
+  const address=input.value.trim();
+  if(!address){toast('Please enter an address','#991B1B');return;}
+  await updateDoc(doc(db,'deliveries',docId),{address});
+  // Auto-save to address book if customer not already there
+  const d=deliveries.find(d=>d.docId===docId);
+  if(d&&d.customer&&!(settings.customers||[]).find(c=>c.name.toLowerCase()===d.customer.toLowerCase())){
+    if(!settings.customers)settings.customers=[];
+    settings.customers.push({name:d.customer,address});
+    await saveSettings();
+    toast('Address saved + added to address book!');
+  } else {
+    toast('Address saved!');
+  }
+  P.renderDaySummary(dateStr);
+};
+
+// Clear address from delivery
+P.clearDeliveryAddr=async function(docId,dateStr){
+  await updateDoc(doc(db,'deliveries',docId),{address:''});
+  P.renderDaySummary(dateStr);
 };
 
 P.exportDay=async function(dateStr){
