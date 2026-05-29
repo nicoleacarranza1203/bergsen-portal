@@ -1,1 +1,1458 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bergsen Portal</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:system-ui,-apple-system,sans-serif;background:#f0f2f5;color:#1a1a1a;font-size:14px;min-height:100vh;}
+    
+    /* AUTH */
+    .auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);}
+    .auth-card{background:#fff;border-radius:16px;padding:40px 36px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,0.3);}
+    .auth-logo{text-align:center;margin-bottom:28px;}
+    .auth-logo h1{font-size:26px;font-weight:700;color:#1a1a1a;letter-spacing:-0.5px;}
+    .auth-logo p{font-size:13px;color:#999;margin-top:4px;}
+    .auth-field{margin-bottom:16px;}
+    .auth-field label{font-size:12px;color:#666;display:block;margin-bottom:5px;font-weight:500;}
+    .auth-field input{width:100%;padding:10px 12px;border:1px solid #e0e0e0;border-radius:8px;font-size:14px;font-family:inherit;transition:border-color 0.2s;}
+    .auth-field input:focus{outline:none;border-color:#0f3460;}
+    .auth-btn{width:100%;padding:12px;background:#0f3460;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:8px;transition:opacity 0.2s;}
+    .auth-btn:hover{opacity:0.9;}
+    .auth-err{font-size:12px;color:#991B1B;margin-top:8px;text-align:center;min-height:18px;}
+    .auth-note{font-size:11px;color:#999;text-align:center;margin-top:16px;line-height:1.5;}
+
+    /* PORTAL SHELL */
+    .portal{display:none;min-height:100vh;flex-direction:column;}
+    .portal.active{display:flex;}
+    .topbar{background:#1a1a2e;color:#fff;padding:0 20px;height:52px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+    .topbar-left{display:flex;align-items:center;gap:12px;}
+    .topbar-logo{font-size:16px;font-weight:700;letter-spacing:-0.3px;}
+    .topbar-right{display:flex;align-items:center;gap:12px;}
+    .topbar-btn{background:none;border:1px solid rgba(255,255,255,0.2);color:#fff;padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit;transition:background 0.2s;}
+    .topbar-btn:hover{background:rgba(255,255,255,0.1);}
+    .portal-body{flex:1;display:flex;overflow:hidden;}
+    .sidebar{width:200px;background:#fff;border-right:1px solid #e5e5e5;flex-shrink:0;overflow-y:auto;}
+    .sidebar-section{padding:16px 12px 8px;font-size:10px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:0.8px;}
+    .sidebar-item{display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;font-size:13px;color:#444;transition:all 0.15s;border-radius:6px;margin:1px 6px;}
+    .sidebar-item:hover{background:#f5f5f5;color:#1a1a1a;}
+    .sidebar-item.active{background:#EEF2FF;color:#3730a3;font-weight:500;}
+    .sidebar-item .icon{font-size:16px;width:20px;text-align:center;}
+    .main-content{flex:1;overflow-y:auto;padding:20px;}
+
+    /* HOME / LAUNCHER */
+    .launcher-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;max-width:900px;}
+    .launcher-card{background:#fff;border:1px solid #e5e5e5;border-radius:12px;padding:24px 20px;cursor:pointer;transition:all 0.2s;text-decoration:none;}
+    .launcher-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.08);border-color:#d0d0d0;}
+    .launcher-icon{font-size:32px;margin-bottom:12px;}
+    .launcher-title{font-size:14px;font-weight:600;color:#1a1a1a;margin-bottom:4px;}
+    .launcher-desc{font-size:12px;color:#999;line-height:1.4;}
+    .launcher-badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:20px;margin-top:8px;font-weight:500;}
+    .badge-live{background:#D1FAE5;color:#065F46;}
+    .badge-coming{background:#F3F4F6;color:#9CA3AF;}
+
+    /* SECTION HEADERS */
+    .section-header{margin-bottom:20px;}
+    .section-header h2{font-size:18px;font-weight:600;}
+    .section-header p{font-size:13px;color:#666;margin-top:3px;}
+
+    /* ORDER ENTRY */
+    .form-card{background:#fff;border:1px solid #e5e5e5;border-radius:12px;padding:20px 22px;margin-bottom:16px;}
+    .form-card-title{font-size:13px;font-weight:600;color:#666;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #f0f0f0;text-transform:uppercase;letter-spacing:0.5px;}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;}
+    .form-grid.three{grid-template-columns:1fr 1fr 1fr;}
+    .form-grid.four{grid-template-columns:1fr 1fr 1fr 1fr;}
+    .span2{grid-column:span 2;}
+    .span3{grid-column:span 3;}
+    .span4{grid-column:span 4;}
+    label.field-label{font-size:11px;color:#666;display:block;margin-bottom:4px;font-weight:500;}
+    input[type=text],input[type=number],input[type=date],input[type=email],input[type=password],select,textarea{width:100%;padding:8px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:6px;background:#fff;color:#1a1a1a;font-family:inherit;}
+    input:focus,select:focus,textarea:focus{outline:none;border-color:#0f3460;}
+    .btn{padding:8px 16px;font-size:13px;border:1px solid #d0d0d0;border-radius:6px;cursor:pointer;background:#fff;color:#1a1a1a;font-family:inherit;transition:all 0.15s;}
+    .btn:hover{background:#f5f5f5;}
+    .btn-primary{background:#0f3460;color:#fff;border-color:#0f3460;}
+    .btn-primary:hover{opacity:0.9;}
+    .btn-success{background:#065F46;color:#fff;border-color:#065F46;}
+    .btn-success:hover{opacity:0.9;}
+    .btn-danger{color:#991B1B;border-color:#FECACA;}
+    .btn-danger:hover{background:#FEE2E2;}
+    .btn-warning{background:#B45309;color:#fff;border-color:#B45309;}
+
+    /* ROUTING BANNER */
+    .routing-banner{border-radius:8px;padding:12px 16px;margin-bottom:14px;font-size:13px;display:flex;align-items:center;gap:10px;}
+    .routing-banner.cutting{background:#DBEAFE;color:#1E40AF;border:1px solid #93C5FD;}
+    .routing-banner.bt{background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;}
+    .routing-banner.shipment{background:#F3E8FF;color:#6B21A8;border:1px solid #C084FC;}
+
+    /* ORDER LOG TABLE */
+    .order-table{width:100%;border-collapse:collapse;font-size:12px;}
+    .order-table th{text-align:left;font-weight:500;font-size:11px;color:#666;padding:8px 10px;border-bottom:1px solid #e5e5e5;white-space:nowrap;background:#fafafa;}
+    .order-table td{padding:8px 10px;border-bottom:1px solid #f0f0f0;vertical-align:middle;}
+    .order-table tr:hover td{background:#fafafa;}
+    .order-table tr.overdue td{background:#FFF8F8;}
+
+    /* BADGES */
+    .badge{display:inline-block;font-size:10px;font-weight:500;padding:2px 7px;border-radius:20px;white-space:nowrap;}
+    .badge-blue{background:#DBEAFE;color:#1E40AF;}
+    .badge-green{background:#D1FAE5;color:#065F46;}
+    .badge-yellow{background:#FEF3C7;color:#92400E;}
+    .badge-red{background:#FEE2E2;color:#991B1B;}
+    .badge-purple{background:#F3E8FF;color:#6B21A8;}
+    .badge-gray{background:#F3F4F6;color:#6B7280;}
+    .badge-orange{background:#FFF7ED;color:#C2410C;}
+
+    /* STATUS PILL */
+    .status-pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:500;padding:3px 9px;border-radius:20px;}
+
+    /* SHIPMENTS */
+    .ship-card{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:14px 16px;margin-bottom:10px;}
+    .ship-card.staged{border-left:3px solid #FCD34D;}
+    .ship-card.picked-up{border-left:3px solid #6EE7B7;opacity:0.7;}
+
+    /* CALENDAR */
+    .cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:#e5e5e5;border-radius:8px;overflow:hidden;}
+    .cal-day-header{background:#f5f5f5;padding:6px;text-align:center;font-size:11px;font-weight:600;color:#666;}
+    .cal-day{background:#fff;min-height:80px;padding:6px;cursor:pointer;transition:background 0.15s;}
+    .cal-day:hover{background:#f9f9f9;}
+    .cal-day.today{background:#EEF2FF;}
+    .cal-day.other-month{background:#fafafa;opacity:0.6;}
+    .cal-date{font-size:11px;font-weight:500;color:#666;margin-bottom:4px;}
+    .cal-date.today-num{background:#0f3460;color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;}
+    .cal-event{font-size:10px;padding:2px 5px;border-radius:3px;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .cal-event.gus{background:#DBEAFE;color:#1E40AF;}
+    .cal-event.jc{background:#D1FAE5;color:#065F46;}
+    .cal-event.sergio{background:#FEF3C7;color:#92400E;}
+
+    /* SETTINGS */
+    .settings-section{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:18px 20px;margin-bottom:16px;}
+    .settings-title{font-size:13px;font-weight:600;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #f0f0f0;}
+    .settings-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f9f9f9;}
+    .settings-row:last-child{border-bottom:none;}
+
+    /* MODAL */
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;}
+    .modal{background:#fff;border-radius:12px;padding:24px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;}
+    .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
+    .modal-title{font-size:16px;font-weight:600;}
+    .modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:#999;line-height:1;}
+    .modal-close:hover{color:#1a1a1a;}
+
+    /* TOAST */
+    .toast{position:fixed;top:20px;right:20px;background:#065F46;color:#fff;padding:12px 18px;border-radius:8px;font-size:13px;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,0.15);animation:slideIn 0.3s ease;}
+    @keyframes slideIn{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}
+
+    /* METRICS */
+    .metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+    .metric-card{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:14px 16px;}
+    .metric-label{font-size:11px;color:#666;margin-bottom:4px;}
+    .metric-val{font-size:24px;font-weight:600;}
+    .metric-sub{font-size:11px;color:#999;margin-top:3px;}
+    .metric-val.green{color:#065F46;}
+    .metric-val.blue{color:#1E40AF;}
+    .metric-val.orange{color:#C2410C;}
+    .metric-val.red{color:#991B1B;}
+
+    /* EMPTY */
+    .empty{text-align:center;padding:40px;color:#999;font-size:13px;}
+
+    /* MOBILE */
+    @media(max-width:640px){
+      .sidebar{display:none;}
+      .launcher-grid{grid-template-columns:1fr 1fr;}
+      .metric-grid{grid-template-columns:1fr 1fr;}
+      .form-grid{grid-template-columns:1fr;}
+      .form-grid.three,.form-grid.four{grid-template-columns:1fr;}
+      .span2,.span3,.span4{grid-column:span 1;}
+      .main-content{padding:12px;}
+    }
+
+    /* MOBILE BOTTOM NAV */
+    #mobile-bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #e0e0e0;z-index:100;box-shadow:0 -2px 8px rgba(0,0,0,0.08);}
+    @media(max-width:640px){#mobile-bottom-nav{display:flex;}}
+    .mob-nav-btn{flex:1;padding:8px 4px;font-size:10px;border:none;background:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;color:#666;font-family:inherit;}
+    .mob-nav-btn.active{color:#0f3460;font-weight:600;}
+    .mob-nav-btn span{font-size:18px;}
+  </style>
+</head>
+<body>
+
+<!-- AUTH SCREEN -->
+<div id="auth-screen" class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <h1>⚙️ Bergsen Portal</h1>
+      <p id="auth-subtitle">Operations Platform</p>
+    </div>
+    <div id="setup-view" style="display:none;">
+      <div class="auth-field">
+        <label>Create a password for your team</label>
+        <input type="password" id="setup-pass" placeholder="Choose a strong password">
+      </div>
+      <div class="auth-field">
+        <label>Confirm password</label>
+        <input type="password" id="setup-confirm" placeholder="Repeat password">
+      </div>
+      <button class="auth-btn" onclick="setupPassword()">Create Portal</button>
+      <div class="auth-err" id="setup-err"></div>
+    </div>
+    <div id="login-view">
+      <div class="auth-field">
+        <label>Password</label>
+        <input type="password" id="login-pass" placeholder="Enter team password" onkeydown="if(event.key==='Enter')login()">
+      </div>
+      <button class="auth-btn" onclick="login()">Sign In</button>
+      <div class="auth-err" id="login-err"></div>
+    </div>
+    <p class="auth-note" id="auth-note"></p>
+  </div>
+</div>
+
+<!-- PORTAL SHELL -->
+<div id="portal" class="portal">
+  <div class="topbar">
+    <div class="topbar-left">
+      <span class="topbar-logo">⚙️ Bergsen Portal</span>
+    </div>
+    <div class="topbar-right">
+      <span id="topbar-date" style="font-size:12px;color:rgba(255,255,255,0.6);"></span>
+      <button class="topbar-btn" onclick="showPage('settings')">⚙ Settings</button>
+      <button class="topbar-btn" onclick="logout()">Sign out</button>
+    </div>
+  </div>
+  <div class="portal-body">
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <div class="sidebar-section">Main</div>
+      <div class="sidebar-item active" onclick="showPage('home')" data-page="home"><span class="icon">🏠</span>Home</div>
+      <div class="sidebar-section">Operations</div>
+      <div class="sidebar-item" onclick="showPage('order-entry')" data-page="order-entry"><span class="icon">➕</span>New Order</div>
+      <div class="sidebar-item" onclick="showPage('order-log')" data-page="order-log"><span class="icon">📋</span>Order Log</div>
+      <div class="sidebar-item" onclick="showPage('saw-cutting')" data-page="saw-cutting"><span class="icon">⚙️</span>Saw Cutting</div>
+      <div class="sidebar-item" onclick="showPage('shipments')" data-page="shipments"><span class="icon">📦</span>Shipments</div>
+      <div class="sidebar-item" onclick="showPage('bt-calendar')" data-page="bt-calendar"><span class="icon">🚛</span>BT Calendar</div>
+      <div class="sidebar-section">Insights</div>
+      <div class="sidebar-item" onclick="showPage('activity')" data-page="activity"><span class="icon">📈</span>Activity</div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="main-content" id="main-content">
+
+      <!-- HOME -->
+      <div id="page-home" class="page active">
+        <div class="section-header">
+          <h2>Good morning 👋</h2>
+          <p id="home-date-sub"></p>
+        </div>
+        <div class="metric-grid" id="home-metrics"></div>
+        <div class="launcher-grid">
+          <div class="launcher-card" onclick="showPage('order-entry')">
+            <div class="launcher-icon">➕</div>
+            <div class="launcher-title">New Order</div>
+            <div class="launcher-desc">Enter a new order — automatically routes to cutting, shipments, and delivery</div>
+            <span class="launcher-badge badge-live">Live</span>
+          </div>
+          <div class="launcher-card" onclick="showPage('order-log')">
+            <div class="launcher-icon">📋</div>
+            <div class="launcher-title">Order Log</div>
+            <div class="launcher-desc">Live order dashboard replacing the O365 workbook</div>
+            <span class="launcher-badge badge-live">Live</span>
+          </div>
+          <div class="launcher-card" onclick="showPage('saw-cutting')">
+            <div class="launcher-icon">⚙️</div>
+            <div class="launcher-title">Saw Cutting</div>
+            <div class="launcher-desc">Cutting queue — auto-populated when orders have cutting = Y</div>
+            <span class="launcher-badge badge-live">Live</span>
+          </div>
+          <div class="launcher-card" onclick="showPage('shipments')">
+            <div class="launcher-icon">📦</div>
+            <div class="launcher-title">Shipments</div>
+            <div class="launcher-desc">Track UPS, FedEx, and common carrier shipments</div>
+            <span class="launcher-badge badge-live">Live</span>
+          </div>
+          <div class="launcher-card" onclick="showPage('bt-calendar')">
+            <div class="launcher-icon">🚛</div>
+            <div class="launcher-title">BT Calendar</div>
+            <div class="launcher-desc">Gus, JC & Sergio truck assignments with route optimizer</div>
+            <span class="launcher-badge badge-live">Live</span>
+          </div>
+          <div class="launcher-card" onclick="showPage('activity')">
+            <div class="launcher-icon">📈</div>
+            <div class="launcher-title">Activity Dashboard</div>
+            <div class="launcher-desc">Productivity metrics, actual vs estimated cut times</div>
+            <span class="launcher-badge badge-live">Live</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ORDER ENTRY -->
+      <div id="page-order-entry" class="page" style="display:none;">
+        <div class="section-header">
+          <h2>New Order</h2>
+          <p>Fill in once — routes automatically to cutting, shipments, and delivery</p>
+        </div>
+
+        <div class="form-card">
+          <div class="form-card-title">Order details</div>
+          <div class="form-grid four">
+            <div>
+              <label class="field-label">SO #</label>
+              <input type="text" id="oe-so" placeholder="e.g. 230184">
+            </div>
+            <div>
+              <label class="field-label">Customer / Vendor</label>
+              <input type="text" id="oe-customer" placeholder="Customer name">
+            </div>
+            <div>
+              <label class="field-label">Salesperson</label>
+              <select id="oe-sp"></select>
+            </div>
+            <div>
+              <label class="field-label">Risk Level</label>
+              <select id="oe-risk">
+                <option value="">Select...</option>
+                <option>Low</option>
+                <option>Medium</option>
+                <option>High</option>
+              </select>
+            </div>
+            <div>
+              <label class="field-label">Entry Date</label>
+              <input type="date" id="oe-entry">
+            </div>
+            <div>
+              <label class="field-label">Ship Date</label>
+              <input type="date" id="oe-ship" onchange="checkRouting()">
+            </div>
+            <div>
+              <label class="field-label">Via / Carrier</label>
+              <select id="oe-via" onchange="checkRouting()"></select>
+            </div>
+            <div>
+              <label class="field-label">Customer PO #</label>
+              <input type="text" id="oe-po" placeholder="Optional">
+            </div>
+            <div>
+              <label class="field-label">Weight (lbs)</label>
+              <input type="number" id="oe-weight" placeholder="lbs">
+            </div>
+            <div>
+              <label class="field-label">Item Lines</label>
+              <input type="number" id="oe-lines" placeholder="# of lines">
+            </div>
+            <div>
+              <label class="field-label">Cutting?</label>
+              <select id="oe-cutting" onchange="checkRouting()">
+                <option value="">Select...</option>
+                <option value="Y">Yes</option>
+                <option value="N">No</option>
+              </select>
+            </div>
+            <div id="oe-time-wrap" style="display:none;">
+              <label class="field-label">Est. Cut Time (min)</label>
+              <input type="number" id="oe-time" placeholder="min">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-card">
+          <div class="form-card-title">Warehouse routing</div>
+          <div class="form-grid four">
+            <div>
+              <label class="field-label">Front Warehouse</label>
+              <input type="text" id="oe-front" placeholder="e.g. ELROY">
+            </div>
+            <div>
+              <label class="field-label">Back Warehouse</label>
+              <input type="text" id="oe-back" placeholder="Optional">
+            </div>
+            <div>
+              <label class="field-label">Routed 12'</label>
+              <input type="text" id="oe-routed12" placeholder="Initials">
+            </div>
+            <div>
+              <label class="field-label">Routed Back</label>
+              <input type="text" id="oe-routedback" placeholder="Initials">
+            </div>
+            <div>
+              <label class="field-label">Assigned To</label>
+              <input type="text" id="oe-assigned" placeholder="Initials">
+            </div>
+            <div class="span3">
+              <label class="field-label">Comments</label>
+              <input type="text" id="oe-comments" placeholder="Any additional notes...">
+            </div>
+          </div>
+        </div>
+
+        <!-- ROUTING BANNERS -->
+        <div id="banner-cutting" class="routing-banner cutting" style="display:none;">
+          ⚙️ <strong>Cutting required</strong> — this order will be automatically added to the Saw Cutting queue
+        </div>
+        <div id="banner-bt" class="routing-banner bt" style="display:none;">
+          🚛 <strong>BT delivery</strong> — this order will appear on the BT Delivery Calendar
+          <div style="margin-top:8px;display:flex;gap:10px;flex-wrap:wrap;">
+            <div>
+              <label class="field-label">Truck</label>
+              <select id="oe-truck" style="min-width:100px;"></select>
+            </div>
+            <div>
+              <label class="field-label">Delivery City</label>
+              <input type="text" id="oe-city" placeholder="City" style="min-width:140px;">
+            </div>
+          </div>
+        </div>
+        <div id="banner-shipment" class="routing-banner shipment" style="display:none;">
+          📦 <strong>Carrier shipment</strong> — this order will be added to the Shipments module for operations to update
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:4px;">
+          <button class="btn btn-primary" onclick="submitOrder()">Submit Order</button>
+          <button class="btn" onclick="clearOrderForm()">Clear</button>
+        </div>
+        <div id="oe-msg" style="font-size:12px;margin-top:8px;min-height:16px;"></div>
+      </div>
+
+      <!-- ORDER LOG -->
+      <div id="page-order-log" class="page" style="display:none;">
+        <div class="section-header">
+          <h2>Order Log</h2>
+          <p>All active orders — auto-archives after ship date passes</p>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+          <input type="text" id="ol-search" placeholder="🔍 Search SO#, customer, SP..." style="max-width:260px;" oninput="renderOrderLog()">
+          <select id="ol-sp-filter" onchange="renderOrderLog()" style="width:auto;">
+            <option value="">All SPs</option>
+          </select>
+          <select id="ol-status-filter" onchange="renderOrderLog()" style="width:auto;">
+            <option value="">All statuses</option>
+            <option>Entered</option>
+            <option>Cutting</option>
+            <option>Ready</option>
+            <option>Shipped</option>
+            <option>Invoiced</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#666;cursor:pointer;">
+            <input type="checkbox" id="ol-show-archive" onchange="renderOrderLog()" style="accent-color:#0f3460;"> Show archived
+          </label>
+          <button class="btn" style="margin-left:auto;font-size:12px;" onclick="exportOrderLog()">⬇ Export CSV</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="order-table">
+            <thead>
+              <tr>
+                <th>SO #</th><th>Customer</th><th>SP</th><th>Entry</th><th>Ship Date</th><th>Via</th><th>Wt</th><th>Lines</th><th>Risk</th><th>Cutting</th><th>Status</th><th>Comments</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="order-log-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- SAW CUTTING -->
+      <div id="page-saw-cutting" class="page" style="display:none;">
+        <div class="section-header">
+          <h2>Saw Cutting</h2>
+          <p>Opens the saw cutting backlog app in a new tab</p>
+        </div>
+        <div style="background:#fff;border:1px solid #e5e5e5;border-radius:12px;padding:32px;text-align:center;">
+          <div style="font-size:48px;margin-bottom:16px;">⚙️</div>
+          <div style="font-size:16px;font-weight:600;margin-bottom:8px;">Saw Cutting Backlog</div>
+          <div style="font-size:13px;color:#666;margin-bottom:20px;">Auto-populated when orders are submitted with Cutting = Y. Open the app to manage the queue and update job status.</div>
+          <button class="btn btn-primary" onclick="window.open('https://nicoleacarranza1203.github.io/saw-backlog-app/','_blank')">Open Saw Cutting App ↗</button>
+          <div style="font-size:11px;color:#999;margin-top:12px;">Opens in a new tab — orders submitted here appear automatically</div>
+        </div>
+      </div>
+
+      <!-- SHIPMENTS -->
+      <div id="page-shipments" class="page" style="display:none;">
+        <div class="section-header">
+          <h2>Shipments</h2>
+          <p>UPS, FedEx, and common carrier orders — update staged and pickup status</p>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+          <input type="text" id="sh-search" placeholder="🔍 Search SO#, customer..." style="max-width:240px;" oninput="renderShipments()">
+          <select id="sh-carrier-filter" onchange="renderShipments()" style="width:auto;">
+            <option value="">All carriers</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#666;cursor:pointer;">
+            <input type="checkbox" id="sh-show-archive" onchange="renderShipments()" style="accent-color:#0f3460;"> Show picked up
+          </label>
+          <button class="btn btn-success" style="margin-left:auto;font-size:12px;" onclick="openAddShipment()">+ Add manually</button>
+        </div>
+        <div id="shipments-list"></div>
+      </div>
+
+      <!-- BT CALENDAR -->
+      <div id="page-bt-calendar" class="page" style="display:none;">
+        <div class="section-header">
+          <h2>BT Delivery Calendar</h2>
+          <p>Truck assignments for Gus, JC & Sergio</p>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+          <div class="cal-header" style="flex:1;margin-bottom:0;">
+            <button class="btn" onclick="calPrev()">← Prev</button>
+            <span id="cal-month-label" style="font-weight:600;font-size:14px;"></span>
+            <button class="btn" onclick="calNext()">Next →</button>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;font-size:12px;">
+            <span style="background:#DBEAFE;color:#1E40AF;padding:2px 8px;border-radius:4px;">Gus</span>
+            <span style="background:#D1FAE5;color:#065F46;padding:2px 8px;border-radius:4px;">JC</span>
+            <span style="background:#FEF3C7;color:#92400E;padding:2px 8px;border-radius:4px;">Sergio</span>
+          </div>
+          <button class="btn btn-primary" style="font-size:12px;" onclick="openAddDelivery()">+ Add delivery</button>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
+      </div>
+
+      <!-- ACTIVITY -->
+      <div id="page-activity" class="page" style="display:none;">
+        <div class="section-header">
+          <h2>Activity Dashboard</h2>
+          <p>Productivity metrics across all modules</p>
+        </div>
+        <div class="metric-grid" id="activity-metrics"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div style="background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:16px;">
+            <div style="font-weight:600;font-size:13px;margin-bottom:12px;">Orders by salesperson (this month)</div>
+            <div id="activity-by-sp"></div>
+          </div>
+          <div style="background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:16px;">
+            <div style="font-weight:600;font-size:13px;margin-bottom:12px;">Orders by status</div>
+            <div id="activity-by-status"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SETTINGS -->
+      <div id="page-settings" class="page" style="display:none;">
+        <div class="section-header">
+          <h2>Settings</h2>
+          <p>Manage team members, carriers, trucks, and platform preferences</p>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-title">Salespersons & emails</div>
+          <div id="sp-list"></div>
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <input type="text" id="new-sp-init" placeholder="Initials (e.g. AB)" style="max-width:100px;">
+            <input type="text" id="new-sp-email" placeholder="Email address" style="max-width:220px;">
+            <button class="btn btn-primary" onclick="addSP()">Add SP</button>
+          </div>
+          <div id="sp-msg" style="font-size:12px;margin-top:6px;min-height:14px;"></div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-title">Carriers / Via options</div>
+          <div id="carrier-list"></div>
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <input type="text" id="new-carrier" placeholder="Carrier name (e.g. Old Dominion)">
+            <button class="btn btn-primary" onclick="addCarrier()">Add Carrier</button>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-title">BT Trucks</div>
+          <div id="truck-list"></div>
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <input type="text" id="new-truck" placeholder="Truck name">
+            <button class="btn btn-primary" onclick="addTruck()">Add Truck</button>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-title">Change password</div>
+          <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+            <div>
+              <label class="field-label">New password</label>
+              <input type="password" id="new-pass" style="max-width:200px;">
+            </div>
+            <div>
+              <label class="field-label">Confirm</label>
+              <input type="password" id="confirm-pass" style="max-width:200px;">
+            </div>
+            <button class="btn btn-primary" onclick="changePassword()">Update</button>
+          </div>
+          <div id="pass-msg" style="font-size:12px;margin-top:6px;min-height:14px;"></div>
+        </div>
+      </div>
+
+    </div><!-- /main-content -->
+  </div><!-- /portal-body -->
+
+  <!-- Mobile bottom nav -->
+  <div id="mobile-bottom-nav">
+    <button class="mob-nav-btn active" onclick="showPage('home')" data-mob="home"><span>🏠</span>Home</button>
+    <button class="mob-nav-btn" onclick="showPage('order-entry')" data-mob="order-entry"><span>➕</span>New</button>
+    <button class="mob-nav-btn" onclick="showPage('order-log')" data-mob="order-log"><span>📋</span>Orders</button>
+    <button class="mob-nav-btn" onclick="showPage('shipments')" data-mob="shipments"><span>📦</span>Shipments</button>
+    <button class="mob-nav-btn" onclick="showPage('bt-calendar')" data-mob="bt-calendar"><span>🚛</span>BT</button>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div id="modal-overlay" class="modal-overlay" style="display:none;" onclick="closeModal(event)">
+  <div class="modal" id="modal-box">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title">Modal</span>
+      <button class="modal-close" onclick="closeModalDirect()">×</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, writeBatch, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+window.onerror = function(msg, src, line, col, err){
+  document.body.innerHTML = `<div style="font-family:sans-serif;padding:40px;max-width:600px;margin:0 auto;">
+    <h2 style="color:#991B1B;">Portal failed to load</h2>
+    <p style="margin:12px 0;color:#666;">Error: ${msg}</p>
+    <p style="font-size:12px;color:#999;">${src} line ${line}</p>
+    <button onclick="location.reload()" style="margin-top:16px;padding:8px 16px;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;">Retry</button>
+  </div>`;
+  return false;
+};
+
+// ── FIREBASE CONFIG ──────────────────────────────────────
+// TODO: Replace with your Bergsen Portal Firebase config
+const firebaseConfig = {
+  apiKey: "AIzaSyDdSa9Qw290Dc1vmwziRRwmJCc3c5yg5ns",
+  authDomain: "bergsen-portal.firebaseapp.com",
+  projectId: "bergsen-portal",
+  storageBucket: "bergsen-portal.firebasestorage.app",
+  messagingSenderId: "909576598503",
+  appId: "1:909576598503:web:0dcd68a61739e4587e4342"
+};
+// ─────────────────────────────────────────────────────────
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const ordersRef = collection(db, 'orders');
+const shipmentsRef = collection(db, 'shipments');
+const deliveriesRef = collection(db, 'deliveries');
+const settingsRef = doc(db, 'settings', 'config');
+
+// ── STATE ─────────────────────────────────────────────────
+let orders = [];
+let shipments = [];
+let deliveries = [];
+let settings = {
+  passwordHash: null,
+  sps: [
+    {init:'NC',email:'nicolec@bergsen.com'},
+    {init:'HM',email:'hollim@bergsen.com'},
+    {init:'MT',email:'miket@bergsen.com'},
+    {init:'TD',email:'tomd@bergsen.com'},
+    {init:'MR',email:'mrim@bergsen.com'},
+    {init:'IC',email:'israelc@bergsen.com'},
+    {init:'HK',email:'hildak@bergsen.com'},
+    {init:'DB',email:'desireeb@bergsen.com'},
+    {init:'TS',email:'toms@bergsen.com'},
+  ],
+  carriers: ['BT','UPS','FedEx','Common Carrier','Will Call'],
+  trucks: ['Gus','JC','Sergio'],
+};
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth();
+let isLoggedIn = false;
+
+// ── HELPERS ───────────────────────────────────────────────
+function uid(){return 'o'+Date.now()+Math.floor(Math.random()*999);}
+function toast(msg,color='#065F46'){
+  const t=document.createElement('div');
+  t.className='toast';t.style.background=color;t.textContent=msg;
+  document.body.appendChild(t);setTimeout(()=>t.remove(),3000);
+}
+function hashPass(p){
+  let h=0;for(let i=0;i<p.length;i++){h=((h<<5)-h)+p.charCodeAt(i);h|=0;}
+  return h.toString(36);
+}
+function fmtDate(d){
+  if(!d) return '—';
+  const dt=new Date(d+'T00:00:00');
+  return dt.toLocaleDateString([],{month:'numeric',day:'numeric',year:'2-digit'});
+}
+function isOverdue(shipDate){
+  if(!shipDate) return false;
+  return new Date(shipDate+'T00:00:00') < new Date(new Date().toDateString());
+}
+function riskBadge(r){
+  if(!r) return '';
+  const cls=r==='High'?'badge-red':r==='Medium'?'badge-yellow':'badge-green';
+  return `<span class="badge ${cls}">${r}</span>`;
+}
+function statusBadge(s){
+  const map={Entered:'badge-blue',Cutting:'badge-orange',Ready:'badge-purple',Shipped:'badge-green',Invoiced:'badge-gray'};
+  return `<span class="badge ${map[s]||'badge-gray'}">${s||'—'}</span>`;
+}
+
+// ── AUTH ──────────────────────────────────────────────────
+async function loadSettings(){
+  try{
+    const snap=await getDoc(settingsRef);
+    if(snap.exists()){
+      const d=snap.data();
+      settings={...settings,...d};
+    }
+  }catch(e){console.log('Settings load:',e);}
+}
+
+async function saveSettings(){
+  try{await setDoc(settingsRef,settings);}catch(e){console.error(e);}
+}
+
+window.setupPassword=async function(){
+  const p=document.getElementById('setup-pass').value;
+  const c=document.getElementById('setup-confirm').value;
+  const err=document.getElementById('setup-err');
+  if(p.length<6){err.textContent='Password must be at least 6 characters.';return;}
+  if(p!==c){err.textContent='Passwords do not match.';return;}
+  settings.passwordHash=hashPass(p);
+  await saveSettings();
+  isLoggedIn=true;
+  showPortal();
+};
+
+window.login=async function(){
+  const p=document.getElementById('login-pass').value;
+  const err=document.getElementById('login-err');
+  if(!p){err.textContent='Please enter the password.';return;}
+  if(hashPass(p)===settings.passwordHash){
+    isLoggedIn=true;
+    showPortal();
+  } else {
+    err.textContent='Incorrect password. Please try again.';
+  }
+};
+
+window.logout=function(){
+  isLoggedIn=false;
+  document.getElementById('portal').classList.remove('active');
+  document.getElementById('auth-screen').style.display='flex';
+  document.getElementById('login-pass').value='';
+  document.getElementById('login-err').textContent='';
+};
+
+function showPortal(){
+  document.getElementById('auth-screen').style.display='none';
+  document.getElementById('portal').classList.add('active');
+  initPortal();
+}
+
+window.changePassword=async function(){
+  const np=document.getElementById('new-pass').value;
+  const cp=document.getElementById('confirm-pass').value;
+  const msg=document.getElementById('pass-msg');
+  if(np.length<6){msg.style.color='#991B1B';msg.textContent='Min 6 characters.';return;}
+  if(np!==cp){msg.style.color='#991B1B';msg.textContent='Passwords do not match.';return;}
+  settings.passwordHash=hashPass(np);
+  await saveSettings();
+  msg.style.color='#065F46';msg.textContent='Password updated!';
+  setTimeout(()=>msg.textContent='',3000);
+};
+
+// ── INIT ──────────────────────────────────────────────────
+async function init(){
+  await loadSettings();
+  const hasPass=settings.passwordHash;
+  if(hasPass){
+    document.getElementById('setup-view').style.display='none';
+    document.getElementById('login-view').style.display='block';
+    document.getElementById('auth-subtitle').textContent='Sign in to continue';
+  } else {
+    document.getElementById('setup-view').style.display='block';
+    document.getElementById('login-view').style.display='none';
+    document.getElementById('auth-subtitle').textContent='First time setup';
+    document.getElementById('auth-note').textContent='Create a shared password for your team. Everyone uses the same password to access the portal.';
+  }
+}
+
+function initPortal(){
+  // Topbar date
+  document.getElementById('topbar-date').textContent=new Date().toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
+  document.getElementById('home-date-sub').textContent=new Date().toLocaleDateString([],{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  // Populate form dropdowns
+  populateDropdowns();
+  // Realtime listeners
+  onSnapshot(query(ordersRef,orderBy('added','desc')),(snap)=>{
+    orders=snap.docs.map(d=>({...d.data(),docId:d.id}));
+    renderAll();
+  });
+  onSnapshot(query(shipmentsRef,orderBy('added','desc')),(snap)=>{
+    shipments=snap.docs.map(d=>({...d.data(),docId:d.id}));
+    renderShipments();
+  });
+  onSnapshot(query(deliveriesRef,orderBy('date')),(snap)=>{
+    deliveries=snap.docs.map(d=>({...d.data(),docId:d.id}));
+    renderCalendar();
+  });
+  // Init order entry date
+  document.getElementById('oe-entry').value=new Date().toISOString().split('T')[0];
+  // Init calendar
+  renderCalendar();
+  showPage('home');
+}
+
+function renderAll(){
+  renderHomeMetrics();
+  renderOrderLog();
+  renderActivity();
+}
+
+function populateDropdowns(){
+  // SP dropdowns
+  ['oe-sp','ol-sp-filter'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    const hasAll=id.includes('filter');
+    el.innerHTML=(hasAll?'<option value="">All SPs</option>':'<option value="">Select...</option>')
+      +settings.sps.map(s=>`<option value="${s.init}">${s.init}</option>`).join('');
+  });
+  // Via dropdown
+  const via=document.getElementById('oe-via');
+  if(via) via.innerHTML='<option value="">Select...</option>'+settings.carriers.map(c=>`<option value="${c}">${c}</option>`).join('');
+  // Truck dropdown
+  const truck=document.getElementById('oe-truck');
+  if(truck) truck.innerHTML=settings.trucks.map(t=>`<option value="${t}">${t}</option>`).join('');
+  // Carrier filter for shipments
+  const cf=document.getElementById('sh-carrier-filter');
+  if(cf) cf.innerHTML='<option value="">All carriers</option>'+settings.carriers.filter(c=>c!=='BT').map(c=>`<option value="${c}">${c}</option>`).join('');
+  renderSettingsLists();
+}
+
+// ── NAVIGATION ────────────────────────────────────────────
+window.showPage=function(page){
+  document.querySelectorAll('.page').forEach(p=>p.style.display='none');
+  const pg=document.getElementById('page-'+page);
+  if(pg) pg.style.display='block';
+  document.querySelectorAll('.sidebar-item').forEach(el=>{
+    el.classList.toggle('active',el.getAttribute('data-page')===page);
+  });
+  document.querySelectorAll('.mob-nav-btn').forEach(el=>{
+    el.classList.toggle('active',el.getAttribute('data-mob')===page);
+  });
+  if(page==='bt-calendar') renderCalendar();
+  if(page==='order-log') renderOrderLog();
+  if(page==='shipments') renderShipments();
+  if(page==='activity') renderActivity();
+  if(page==='settings') renderSettingsLists();
+  window.scrollTo(0,0);
+};
+
+// ── ORDER ENTRY ───────────────────────────────────────────
+window.checkRouting=function(){
+  const via=document.getElementById('oe-via').value;
+  const cutting=document.getElementById('oe-cutting').value;
+  document.getElementById('oe-time-wrap').style.display=cutting==='Y'?'block':'none';
+  document.getElementById('banner-cutting').style.display=cutting==='Y'?'flex':'none';
+  document.getElementById('banner-bt').style.display=via==='BT'?'flex':'none';
+  document.getElementById('banner-shipment').style.display=(via&&via!=='BT'&&via!=='')?'flex':'none';
+};
+
+window.submitOrder=async function(){
+  const so=document.getElementById('oe-so').value.trim();
+  const customer=document.getElementById('oe-customer').value.trim();
+  const sp=document.getElementById('oe-sp').value;
+  const msg=document.getElementById('oe-msg');
+  if(!so||!customer||!sp){
+    msg.style.color='#991B1B';msg.textContent='Please fill in SO#, Customer, and Salesperson.';return;
+  }
+  const via=document.getElementById('oe-via').value;
+  const cutting=document.getElementById('oe-cutting').value;
+  const shipDate=document.getElementById('oe-ship').value;
+  const orderData={
+    id:uid(),so,customer,sp,
+    risk:document.getElementById('oe-risk').value,
+    entry:document.getElementById('oe-entry').value,
+    ship:shipDate,
+    via,
+    po:document.getElementById('oe-po').value.trim(),
+    weight:document.getElementById('oe-weight').value,
+    lines:document.getElementById('oe-lines').value,
+    cutting,
+    estTime:cutting==='Y'?document.getElementById('oe-time').value:'',
+    front:document.getElementById('oe-front').value.trim(),
+    back:document.getElementById('oe-back').value.trim(),
+    routed12:document.getElementById('oe-routed12').value.trim(),
+    routedBack:document.getElementById('oe-routedback').value.trim(),
+    assigned:document.getElementById('oe-assigned').value.trim(),
+    comments:document.getElementById('oe-comments').value.trim(),
+    status:'Entered',
+    archived:false,
+    added:Date.now(),
+  };
+  try{
+    const batch=writeBatch(db);
+    // Save order
+    const orderRef=doc(ordersRef);
+    batch.set(orderRef,orderData);
+    // Auto-route: BT delivery
+    if(via==='BT'){
+      const truck=document.getElementById('oe-truck').value;
+      const city=document.getElementById('oe-city').value.trim();
+      const delRef=doc(deliveriesRef);
+      batch.set(delRef,{
+        id:uid(),so,customer,truck,city,
+        date:shipDate||'',
+        weight:orderData.weight,
+        sp,status:'Scheduled',added:Date.now(),
+      });
+    }
+    // Auto-route: Carrier shipment
+    if(via&&via!=='BT'){
+      const shipRef=doc(shipmentsRef);
+      batch.set(shipRef,{
+        id:uid(),so,customer,sp,carrier:via,
+        city:'',po:orderData.po,weight:orderData.weight,
+        estShipDate:shipDate||'',
+        staged:false,pickedUp:false,
+        comments:orderData.comments,
+        added:Date.now(),archived:false,
+      });
+    }
+    await batch.commit();
+    // Auto-route: Cutting — push to saw app Firebase
+    if(cutting==='Y'){
+      await pushToSawApp(orderData);
+    }
+    msg.style.color='#065F46';
+    let routeMsg=[];
+    if(cutting==='Y') routeMsg.push('added to saw queue');
+    if(via==='BT') routeMsg.push('added to BT calendar');
+    if(via&&via!=='BT') routeMsg.push('added to shipments');
+    msg.textContent=`✓ Order ${so} submitted${routeMsg.length?' — '+routeMsg.join(', '):''}`;
+    clearOrderForm(true);
+    setTimeout(()=>msg.textContent='',4000);
+    toast(`Order ${so} submitted successfully!`);
+  } catch(err){
+    msg.style.color='#991B1B';msg.textContent='Error: '+err.message;
+  }
+};
+
+async function pushToSawApp(order){
+  // Push to saw cutting app Firebase (same project or cross-project)
+  // For now uses same Firebase project under 'jobs' collection
+  try{
+    const sawRef=collection(db,'jobs');
+    await addDoc(sawRef,{
+      id:uid(),
+      orderKey:order.so,
+      order:order.so,
+      customer:order.customer,
+      material:'',
+      qty:'',
+      length:'',
+      time:Number(order.estTime)||0,
+      due:order.ship,
+      notes:order.comments,
+      rush:order.risk==='High',
+      risk:order.risk,
+      salesperson:order.sp,
+      operator:'',
+      saw:'Unassigned',
+      lineNum:1,totalLines:1,isMultiLine:false,
+      pct:0,status:'queued',
+      timerRunning:false,timerElapsed:0,timerStart:null,actualTime:null,
+      added:Date.now(),completedAt:null,
+    });
+  } catch(e){console.error('Saw push failed:',e);}
+}
+
+window.clearOrderForm=function(keepMsg){
+  ['oe-so','oe-customer','oe-po','oe-weight','oe-lines','oe-front','oe-back','oe-routed12','oe-routedback','oe-assigned','oe-comments','oe-time','oe-city'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.value='';
+  });
+  ['oe-sp','oe-risk','oe-via','oe-cutting'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.value='';
+  });
+  document.getElementById('oe-entry').value=new Date().toISOString().split('T')[0];
+  document.getElementById('oe-ship').value='';
+  ['banner-cutting','banner-bt','banner-shipment'].forEach(id=>document.getElementById(id).style.display='none');
+  document.getElementById('oe-time-wrap').style.display='none';
+  if(!keepMsg)document.getElementById('oe-msg').textContent='';
+};
+
+// ── ORDER LOG ─────────────────────────────────────────────
+window.renderOrderLog=function(){
+  const search=(document.getElementById('ol-search')?.value||'').toLowerCase();
+  const spF=document.getElementById('ol-sp-filter')?.value||'';
+  const statusF=document.getElementById('ol-status-filter')?.value||'';
+  const showArchive=document.getElementById('ol-show-archive')?.checked;
+  // Populate SP filter
+  const spSel=document.getElementById('ol-sp-filter');
+  if(spSel&&spSel.options.length<=1){
+    settings.sps.forEach(s=>{const o=document.createElement('option');o.value=s.init;o.textContent=s.init;spSel.appendChild(o);});
+  }
+  let visible=orders.filter(o=>{
+    if(!showArchive&&o.archived) return false;
+    if(spF&&o.sp!==spF) return false;
+    if(statusF&&o.status!==statusF) return false;
+    if(search&&!`${o.so} ${o.customer} ${o.sp}`.toLowerCase().includes(search)) return false;
+    return true;
+  });
+  const tbody=document.getElementById('order-log-body');
+  if(!visible.length){tbody.innerHTML=`<tr><td colspan="13" class="empty">No orders found</td></tr>`;return;}
+  tbody.innerHTML=visible.map(o=>`
+    <tr class="${isOverdue(o.ship)&&o.status!=='Shipped'&&o.status!=='Invoiced'?'overdue':''}">
+      <td style="font-weight:500;">${o.so}</td>
+      <td>${o.customer}</td>
+      <td><span class="badge badge-blue">${o.sp||'—'}</span></td>
+      <td style="white-space:nowrap;">${fmtDate(o.entry)}</td>
+      <td style="white-space:nowrap;${isOverdue(o.ship)&&o.status!=='Shipped'?'color:#991B1B;font-weight:500;':''}">${fmtDate(o.ship)}</td>
+      <td>${o.via||'—'}</td>
+      <td>${o.weight?Number(o.weight).toLocaleString()+' lbs':'—'}</td>
+      <td>${o.lines||'—'}</td>
+      <td>${riskBadge(o.risk)}</td>
+      <td><span class="badge ${o.cutting==='Y'?'badge-orange':'badge-gray'}">${o.cutting||'—'}</span></td>
+      <td>
+        <select style="font-size:11px;padding:2px 6px;border:1px solid #e0e0e0;border-radius:4px;" onchange="updateOrderStatus('${o.docId}',this.value)">
+          ${['Entered','Cutting','Ready','Shipped','Invoiced'].map(s=>`<option ${s===o.status?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${o.comments||'—'}</td>
+      <td><button class="btn" style="font-size:11px;padding:2px 8px;" onclick="openEditOrder('${o.docId}')">Edit</button></td>
+    </tr>`).join('');
+};
+
+window.updateOrderStatus=async function(docId,status){
+  await updateDoc(doc(db,'orders',docId),{status});
+  // Auto-archive if shipped and ship date passed
+  if(status==='Shipped'||status==='Invoiced'){
+    const o=orders.find(o=>o.docId===docId);
+    if(o&&isOverdue(o.ship)) await updateDoc(doc(db,'orders',docId),{archived:true});
+  }
+};
+
+window.exportOrderLog=function(){
+  const headers=['SO#','Customer','SP','Entry','Ship Date','Via','Weight','Lines','Risk','Cutting','Est Time','Status','Comments'];
+  const rows=orders.filter(o=>!o.archived).map(o=>[
+    o.so,o.customer,o.sp,o.entry,o.ship,o.via,o.weight,o.lines,o.risk,o.cutting,o.estTime,o.status,
+    `"${(o.comments||'').replace(/"/g,'""')}"`
+  ].join(','));
+  const csv=[headers.join(','),...rows].join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download=`bergsen-orders-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+};
+
+window.openEditOrder=function(docId){
+  const o=orders.find(o=>o.docId===docId);
+  if(!o) return;
+  const spOpts=settings.sps.map(s=>`<option value="${s.init}" ${s.init===o.sp?'selected':''}>${s.init}</option>`).join('');
+  const carrierOpts=settings.carriers.map(c=>`<option value="${c}" ${c===o.via?'selected':''}>${c}</option>`).join('');
+  openModal('Edit Order — '+o.so,`
+    <div class="form-grid">
+      <div><label class="field-label">Customer</label><input type="text" id="edit-customer" value="${o.customer||''}"></div>
+      <div><label class="field-label">Salesperson</label><select id="edit-sp">${spOpts}</select></div>
+      <div><label class="field-label">Entry Date</label><input type="date" id="edit-entry" value="${o.entry||''}"></div>
+      <div><label class="field-label">Ship Date</label><input type="date" id="edit-ship" value="${o.ship||''}"></div>
+      <div><label class="field-label">Via</label><select id="edit-via">${carrierOpts}</select></div>
+      <div><label class="field-label">Weight</label><input type="number" id="edit-weight" value="${o.weight||''}"></div>
+      <div><label class="field-label">Lines</label><input type="number" id="edit-lines" value="${o.lines||''}"></div>
+      <div><label class="field-label">Risk</label><select id="edit-risk"><option value="">—</option>${['Low','Medium','High'].map(r=>`<option ${r===o.risk?'selected':''}>${r}</option>`).join('')}</select></div>
+      <div><label class="field-label">Cutting</label><select id="edit-cutting"><option value="">—</option><option value="Y" ${o.cutting==='Y'?'selected':''}>Yes</option><option value="N" ${o.cutting==='N'?'selected':''}>No</option></select></div>
+      <div><label class="field-label">Est Time (min)</label><input type="number" id="edit-time" value="${o.estTime||''}"></div>
+      <div><label class="field-label">Front</label><input type="text" id="edit-front" value="${o.front||''}"></div>
+      <div><label class="field-label">Back</label><input type="text" id="edit-back" value="${o.back||''}"></div>
+      <div><label class="field-label">Routed 12'</label><input type="text" id="edit-routed12" value="${o.routed12||''}"></div>
+      <div><label class="field-label">Routed Back</label><input type="text" id="edit-routedback" value="${o.routedBack||''}"></div>
+      <div><label class="field-label">Assigned</label><input type="text" id="edit-assigned" value="${o.assigned||''}"></div>
+      <div class="span2"><label class="field-label">Comments</label><input type="text" id="edit-comments" value="${o.comments||''}"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px;">
+      <button class="btn btn-primary" onclick="saveEditOrder('${docId}')">Save changes</button>
+      <button class="btn btn-danger" onclick="deleteOrder('${docId}')">Delete order</button>
+    </div>
+    <div id="edit-msg" style="font-size:12px;margin-top:8px;min-height:14px;"></div>
+  `);
+};
+
+window.saveEditOrder=async function(docId){
+  const updates={
+    customer:document.getElementById('edit-customer').value.trim(),
+    sp:document.getElementById('edit-sp').value,
+    entry:document.getElementById('edit-entry').value,
+    ship:document.getElementById('edit-ship').value,
+    via:document.getElementById('edit-via').value,
+    weight:document.getElementById('edit-weight').value,
+    lines:document.getElementById('edit-lines').value,
+    risk:document.getElementById('edit-risk').value,
+    cutting:document.getElementById('edit-cutting').value,
+    estTime:document.getElementById('edit-time').value,
+    front:document.getElementById('edit-front').value.trim(),
+    back:document.getElementById('edit-back').value.trim(),
+    routed12:document.getElementById('edit-routed12').value.trim(),
+    routedBack:document.getElementById('edit-routedback').value.trim(),
+    assigned:document.getElementById('edit-assigned').value.trim(),
+    comments:document.getElementById('edit-comments').value.trim(),
+  };
+  await updateDoc(doc(db,'orders',docId),updates);
+  toast('Order updated!');
+  closeModalDirect();
+};
+
+window.deleteOrder=async function(docId){
+  if(!confirm('Delete this order permanently?')) return;
+  await deleteDoc(doc(db,'orders',docId));
+  toast('Order deleted','#991B1B');
+  closeModalDirect();
+};
+
+// ── SHIPMENTS ─────────────────────────────────────────────
+window.renderShipments=function(){
+  const search=(document.getElementById('sh-search')?.value||'').toLowerCase();
+  const carrierF=document.getElementById('sh-carrier-filter')?.value||'';
+  const showPickedUp=document.getElementById('sh-show-archive')?.checked;
+  // Populate carrier filter
+  const cf=document.getElementById('sh-carrier-filter');
+  if(cf&&cf.options.length<=1){
+    settings.carriers.filter(c=>c!=='BT').forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;cf.appendChild(o);});
+  }
+  let visible=shipments.filter(s=>{
+    if(!showPickedUp&&s.pickedUp) return false;
+    if(carrierF&&s.carrier!==carrierF) return false;
+    if(search&&!`${s.so} ${s.customer} ${s.carrier}`.toLowerCase().includes(search)) return false;
+    return true;
+  });
+  const el=document.getElementById('shipments-list');
+  if(!visible.length){el.innerHTML=`<div class="empty">No active shipments</div>`;return;}
+  el.innerHTML=visible.map(s=>`
+    <div class="ship-card ${s.staged?'staged':''} ${s.pickedUp?'picked-up':''}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+        <div>
+          <span style="font-weight:600;font-size:14px;">${s.so}</span>
+          <span class="badge badge-purple" style="margin-left:8px;">${s.carrier}</span>
+          ${s.staged?'<span class="badge badge-yellow" style="margin-left:4px;">Staged</span>':''}
+          ${s.pickedUp?'<span class="badge badge-green" style="margin-left:4px;">Picked Up</span>':''}
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${!s.staged?`<button class="btn" style="font-size:11px;padding:3px 8px;background:#FEF3C7;color:#92400E;border-color:#FCD34D;" onclick="markStaged('${s.docId}')">Mark Staged</button>`:''}
+          ${s.staged&&!s.pickedUp?`<button class="btn btn-success" style="font-size:11px;padding:3px 8px;" onclick="markPickedUp('${s.docId}')">Mark Picked Up</button>`:''}
+          <button class="btn" style="font-size:11px;padding:3px 8px;" onclick="openEditShipment('${s.docId}')">Edit</button>
+        </div>
+      </div>
+      <div style="font-size:12px;color:#666;margin-top:8px;display:flex;flex-wrap:wrap;gap:12px;">
+        <span><strong>Customer:</strong> ${s.customer}</span>
+        ${s.city?`<span><strong>City:</strong> ${s.city}</span>`:''}
+        <span><strong>Est. Ship:</strong> ${fmtDate(s.estShipDate)}</span>
+        ${s.weight?`<span><strong>Weight:</strong> ${Number(s.weight).toLocaleString()} lbs</span>`:''}
+        ${s.po?`<span><strong>PO#:</strong> ${s.po}</span>`:''}
+        ${s.sp?`<span><strong>SP:</strong> ${s.sp}</span>`:''}
+      </div>
+      ${s.comments?`<div style="font-size:11px;color:#999;margin-top:6px;">${s.comments}</div>`:''}
+    </div>`).join('');
+};
+
+window.markStaged=async function(docId){
+  await updateDoc(doc(db,'shipments',docId),{staged:true});
+  toast('Marked as staged');
+};
+
+window.markPickedUp=async function(docId){
+  const s=shipments.find(s=>s.docId===docId);
+  if(!s) return;
+  await updateDoc(doc(db,'shipments',docId),{pickedUp:true,pickedUpAt:Date.now(),archived:true});
+  // Notify SP
+  const spData=settings.sps.find(sp=>sp.init===s.sp);
+  if(spData) toast(`📧 Notification sent to ${spData.init} (${spData.email})`);
+  toast(`✓ ${s.so} marked as picked up!`);
+};
+
+window.openAddShipment=function(){
+  const carrierOpts=settings.carriers.filter(c=>c!=='BT').map(c=>`<option value="${c}">${c}</option>`).join('');
+  const spOpts=settings.sps.map(s=>`<option value="${s.init}">${s.init}</option>`).join('');
+  openModal('Add Shipment',`
+    <div class="form-grid">
+      <div><label class="field-label">SO #</label><input type="text" id="ns-so" placeholder="SO#"></div>
+      <div><label class="field-label">Customer</label><input type="text" id="ns-customer"></div>
+      <div><label class="field-label">Carrier</label><select id="ns-carrier">${carrierOpts}</select></div>
+      <div><label class="field-label">Salesperson</label><select id="ns-sp"><option value="">—</option>${spOpts}</select></div>
+      <div><label class="field-label">City</label><input type="text" id="ns-city"></div>
+      <div><label class="field-label">Est. Ship Date</label><input type="date" id="ns-date"></div>
+      <div><label class="field-label">Customer PO #</label><input type="text" id="ns-po"></div>
+      <div><label class="field-label">Weight (lbs)</label><input type="number" id="ns-weight"></div>
+      <div class="span2"><label class="field-label">Comments</label><input type="text" id="ns-comments" placeholder="Who arranges pickup, etc."></div>
+    </div>
+    <div style="margin-top:14px;"><button class="btn btn-primary" onclick="saveNewShipment()">Add Shipment</button></div>
+  `);
+};
+
+window.saveNewShipment=async function(){
+  const so=document.getElementById('ns-so').value.trim();
+  const customer=document.getElementById('ns-customer').value.trim();
+  if(!so||!customer){toast('SO# and Customer required','#991B1B');return;}
+  await addDoc(shipmentsRef,{
+    id:uid(),so,customer,
+    carrier:document.getElementById('ns-carrier').value,
+    sp:document.getElementById('ns-sp').value,
+    city:document.getElementById('ns-city').value.trim(),
+    estShipDate:document.getElementById('ns-date').value,
+    po:document.getElementById('ns-po').value.trim(),
+    weight:document.getElementById('ns-weight').value,
+    comments:document.getElementById('ns-comments').value.trim(),
+    staged:false,pickedUp:false,archived:false,added:Date.now(),
+  });
+  toast('Shipment added!');closeModalDirect();
+};
+
+window.openEditShipment=function(docId){
+  const s=shipments.find(s=>s.docId===docId);
+  if(!s) return;
+  const carrierOpts=settings.carriers.filter(c=>c!=='BT').map(c=>`<option value="${c}" ${c===s.carrier?'selected':''}>${c}</option>`).join('');
+  openModal('Edit Shipment',`
+    <div class="form-grid">
+      <div><label class="field-label">Customer</label><input type="text" id="es-customer" value="${s.customer||''}"></div>
+      <div><label class="field-label">Carrier</label><select id="es-carrier">${carrierOpts}</select></div>
+      <div><label class="field-label">City</label><input type="text" id="es-city" value="${s.city||''}"></div>
+      <div><label class="field-label">Est. Ship Date</label><input type="date" id="es-date" value="${s.estShipDate||''}"></div>
+      <div><label class="field-label">Weight</label><input type="number" id="es-weight" value="${s.weight||''}"></div>
+      <div><label class="field-label">PO #</label><input type="text" id="es-po" value="${s.po||''}"></div>
+      <div class="span2"><label class="field-label">Comments</label><input type="text" id="es-comments" value="${s.comments||''}"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn btn-primary" onclick="saveEditShipment('${docId}')">Save</button>
+      <button class="btn btn-danger" onclick="deleteShipment('${docId}')">Delete</button>
+    </div>
+  `);
+};
+
+window.saveEditShipment=async function(docId){
+  await updateDoc(doc(db,'shipments',docId),{
+    customer:document.getElementById('es-customer').value.trim(),
+    carrier:document.getElementById('es-carrier').value,
+    city:document.getElementById('es-city').value.trim(),
+    estShipDate:document.getElementById('es-date').value,
+    weight:document.getElementById('es-weight').value,
+    po:document.getElementById('es-po').value.trim(),
+    comments:document.getElementById('es-comments').value.trim(),
+  });
+  toast('Shipment updated!');closeModalDirect();
+};
+
+window.deleteShipment=async function(docId){
+  if(!confirm('Delete this shipment?')) return;
+  await deleteDoc(doc(db,'shipments',docId));
+  toast('Deleted','#991B1B');closeModalDirect();
+};
+
+// ── BT CALENDAR ───────────────────────────────────────────
+window.calPrev=function(){calMonth--;if(calMonth<0){calMonth=11;calYear--;}renderCalendar();}
+window.calNext=function(){calMonth++;if(calMonth>11){calMonth=0;calYear++;}renderCalendar();}
+
+function renderCalendar(){
+  const label=document.getElementById('cal-month-label');
+  if(!label) return;
+  label.textContent=new Date(calYear,calMonth).toLocaleDateString([],{month:'long',year:'numeric'});
+  const grid=document.getElementById('cal-grid');
+  if(!grid) return;
+  const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  let html=days.map(d=>`<div class="cal-day-header">${d}</div>`).join('');
+  const firstDay=new Date(calYear,calMonth,1).getDay();
+  const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
+  const daysInPrev=new Date(calYear,calMonth,0).getDate();
+  const today=new Date();
+  // Prev month padding
+  for(let i=firstDay-1;i>=0;i--){
+    html+=`<div class="cal-day other-month"><div class="cal-date">${daysInPrev-i}</div></div>`;
+  }
+  // Current month days
+  for(let d=1;d<=daysInMonth;d++){
+    const dateStr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isToday=today.getFullYear()===calYear&&today.getMonth()===calMonth&&today.getDate()===d;
+    const dayDeliveries=deliveries.filter(del=>del.date===dateStr);
+    const eventHtml=dayDeliveries.map(del=>{
+      const cls=del.truck==='Gus'?'gus':del.truck==='JC'?'jc':'sergio';
+      return `<div class="cal-event ${cls}" title="${del.truck}: ${del.customer} (${del.city||''})">${del.truck}: ${del.so}</div>`;
+    }).join('');
+    html+=`<div class="cal-day${isToday?' today':''}" onclick="openAddDelivery('${dateStr}')">
+      <div class="cal-date${isToday?' today-num':''}">${d}</div>
+      ${eventHtml}
+    </div>`;
+  }
+  // Next month padding
+  const totalCells=Math.ceil((firstDay+daysInMonth)/7)*7;
+  const remaining=totalCells-(firstDay+daysInMonth);
+  for(let d=1;d<=remaining;d++){
+    html+=`<div class="cal-day other-month"><div class="cal-date">${d}</div></div>`;
+  }
+  grid.innerHTML=html;
+}
+
+window.openAddDelivery=function(date){
+  const truckOpts=settings.trucks.map(t=>`<option value="${t}">${t}</option>`).join('');
+  openModal('Add BT Delivery',`
+    <div class="form-grid">
+      <div><label class="field-label">SO #</label><input type="text" id="nd-so"></div>
+      <div><label class="field-label">Customer</label><input type="text" id="nd-customer"></div>
+      <div><label class="field-label">Truck</label><select id="nd-truck">${truckOpts}</select></div>
+      <div><label class="field-label">Delivery Date</label><input type="date" id="nd-date" value="${date||new Date().toISOString().split('T')[0]}"></div>
+      <div><label class="field-label">City</label><input type="text" id="nd-city"></div>
+      <div><label class="field-label">Weight (lbs)</label><input type="number" id="nd-weight"></div>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:8px;">
+      <button class="btn btn-primary" onclick="saveDelivery()">Add to Calendar</button>
+    </div>
+  `);
+};
+
+window.saveDelivery=async function(){
+  const so=document.getElementById('nd-so').value.trim();
+  const customer=document.getElementById('nd-customer').value.trim();
+  if(!so||!customer){toast('SO# and Customer required','#991B1B');return;}
+  await addDoc(deliveriesRef,{
+    id:uid(),so,customer,
+    truck:document.getElementById('nd-truck').value,
+    date:document.getElementById('nd-date').value,
+    city:document.getElementById('nd-city').value.trim(),
+    weight:document.getElementById('nd-weight').value,
+    status:'Scheduled',added:Date.now(),
+  });
+  toast('Delivery added to calendar!');closeModalDirect();
+  renderCalendar();
+};
+
+// ── HOME METRICS ──────────────────────────────────────────
+function renderHomeMetrics(){
+  const today=new Date().toISOString().split('T')[0];
+  const activeOrders=orders.filter(o=>!o.archived);
+  const todayShip=orders.filter(o=>o.ship===today&&!o.archived);
+  const overdue=orders.filter(o=>isOverdue(o.ship)&&!['Shipped','Invoiced'].includes(o.status)&&!o.archived);
+  const pendingShip=shipments.filter(s=>!s.pickedUp);
+  document.getElementById('home-metrics').innerHTML=`
+    <div class="metric-card"><div class="metric-label">Active orders</div><div class="metric-val blue">${activeOrders.length}</div><div class="metric-sub">in the log</div></div>
+    <div class="metric-card"><div class="metric-label">Shipping today</div><div class="metric-val green">${todayShip.length}</div><div class="metric-sub">due today</div></div>
+    <div class="metric-card"><div class="metric-label">Overdue</div><div class="metric-val ${overdue.length?'red':''}">${overdue.length}</div><div class="metric-sub">past ship date</div></div>
+    <div class="metric-card"><div class="metric-label">Pending shipments</div><div class="metric-val orange">${pendingShip.length}</div><div class="metric-sub">awaiting pickup</div></div>
+  `;
+}
+
+// ── ACTIVITY ──────────────────────────────────────────────
+function renderActivity(){
+  const now=new Date();
+  const monthStart=new Date(now.getFullYear(),now.getMonth(),1).getTime();
+  const monthOrders=orders.filter(o=>o.added>=monthStart);
+  const totalOrders=orders.filter(o=>!o.archived).length;
+  const shipped=orders.filter(o=>o.status==='Shipped'||o.status==='Invoiced').length;
+  const cutting=orders.filter(o=>o.cutting==='Y'&&!o.archived).length;
+  document.getElementById('activity-metrics').innerHTML=`
+    <div class="metric-card"><div class="metric-label">Orders this month</div><div class="metric-val blue">${monthOrders.length}</div></div>
+    <div class="metric-card"><div class="metric-label">Total active</div><div class="metric-val">${totalOrders}</div></div>
+    <div class="metric-card"><div class="metric-label">Shipped / Invoiced</div><div class="metric-val green">${shipped}</div></div>
+    <div class="metric-card"><div class="metric-label">Require cutting</div><div class="metric-val orange">${cutting}</div></div>
+  `;
+  // By SP
+  const bySP={};
+  monthOrders.forEach(o=>{bySP[o.sp||'?']=(bySP[o.sp||'?']||0)+1;});
+  const maxSP=Math.max(...Object.values(bySP),1);
+  document.getElementById('activity-by-sp').innerHTML=Object.entries(bySP).sort((a,b)=>b[1]-a[1]).map(([sp,count])=>`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <span style="min-width:32px;font-size:12px;font-weight:500;">${sp}</span>
+      <div style="flex:1;height:8px;background:#f0f0f0;border-radius:4px;overflow:hidden;">
+        <div style="width:${Math.round(count/maxSP*100)}%;height:100%;background:#0f3460;border-radius:4px;"></div>
+      </div>
+      <span style="font-size:12px;color:#666;min-width:20px;">${count}</span>
+    </div>`).join('') || '<div class="empty">No data this month</div>';
+  // By status
+  const byStatus={};
+  orders.filter(o=>!o.archived).forEach(o=>{byStatus[o.status||'?']=(byStatus[o.status||'?']||0)+1;});
+  const maxSt=Math.max(...Object.values(byStatus),1);
+  document.getElementById('activity-by-status').innerHTML=Object.entries(byStatus).map(([st,count])=>`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <span style="min-width:70px;font-size:12px;">${statusBadge(st)}</span>
+      <div style="flex:1;height:8px;background:#f0f0f0;border-radius:4px;overflow:hidden;">
+        <div style="width:${Math.round(count/maxSt*100)}%;height:100%;background:#0f3460;border-radius:4px;"></div>
+      </div>
+      <span style="font-size:12px;color:#666;min-width:20px;">${count}</span>
+    </div>`).join('') || '<div class="empty">No data</div>';
+}
+
+// ── SETTINGS ──────────────────────────────────────────────
+function renderSettingsLists(){
+  // SPs
+  document.getElementById('sp-list').innerHTML=settings.sps.map((s,i)=>`
+    <div class="settings-row">
+      <span style="font-weight:500;min-width:40px;">${s.init}</span>
+      <input type="text" value="${s.email}" id="sp-email-${i}" style="flex:1;" onchange="updateSPEmail(${i},this.value)">
+      <button class="btn btn-danger" style="font-size:11px;padding:2px 8px;" onclick="removeSP(${i})">Remove</button>
+    </div>`).join('');
+  // Carriers
+  const builtIn=['BT','UPS','FedEx','Common Carrier','Will Call'];
+  document.getElementById('carrier-list').innerHTML=settings.carriers.map((c,i)=>`
+    <div class="settings-row">
+      <span style="flex:1;font-size:13px;">${c}</span>
+      ${!builtIn.includes(c)?`<button class="btn btn-danger" style="font-size:11px;padding:2px 8px;" onclick="removeCarrier(${i})">Remove</button>`:'<span style="font-size:11px;color:#999;">Built-in</span>'}
+    </div>`).join('');
+  // Trucks
+  document.getElementById('truck-list').innerHTML=settings.trucks.map((t,i)=>`
+    <div class="settings-row">
+      <input type="text" value="${t}" id="truck-${i}" style="flex:1;" onchange="updateTruck(${i},this.value)">
+      ${settings.trucks.length>1?`<button class="btn btn-danger" style="font-size:11px;padding:2px 8px;" onclick="removeTruck(${i})">Remove</button>`:''}
+    </div>`).join('');
+}
+
+window.addSP=async function(){
+  const init=document.getElementById('new-sp-init').value.trim().toUpperCase();
+  const email=document.getElementById('new-sp-email').value.trim();
+  const msg=document.getElementById('sp-msg');
+  if(!init||!email){msg.style.color='#991B1B';msg.textContent='Both initials and email required.';return;}
+  if(settings.sps.find(s=>s.init===init)){msg.style.color='#991B1B';msg.textContent='Initials already exist.';return;}
+  settings.sps.push({init,email});
+  await saveSettings();
+  populateDropdowns();
+  document.getElementById('new-sp-init').value='';document.getElementById('new-sp-email').value='';
+  msg.style.color='#065F46';msg.textContent=`${init} added!`;setTimeout(()=>msg.textContent='',2000);
+};
+window.removeSP=async function(i){
+  if(!confirm(`Remove ${settings.sps[i].init}?`)) return;
+  settings.sps.splice(i,1);await saveSettings();populateDropdowns();
+};
+window.updateSPEmail=async function(i,val){settings.sps[i].email=val;await saveSettings();};
+window.addCarrier=async function(){
+  const c=document.getElementById('new-carrier').value.trim();
+  if(!c) return;
+  if(settings.carriers.includes(c)){toast('Carrier already exists','#991B1B');return;}
+  settings.carriers.push(c);await saveSettings();
+  document.getElementById('new-carrier').value='';populateDropdowns();toast('Carrier added!');
+};
+window.removeCarrier=async function(i){
+  settings.carriers.splice(i,1);await saveSettings();populateDropdowns();
+};
+window.addTruck=async function(){
+  const t=document.getElementById('new-truck').value.trim();
+  if(!t) return;
+  settings.trucks.push(t);await saveSettings();
+  document.getElementById('new-truck').value='';populateDropdowns();toast('Truck added!');
+};
+window.removeTruck=async function(i){
+  settings.trucks.splice(i,1);await saveSettings();populateDropdowns();
+};
+window.updateTruck=async function(i,val){settings.trucks[i]=val;await saveSettings();};
+
+// ── MODAL ─────────────────────────────────────────────────
+function openModal(title,body){
+  document.getElementById('modal-title').textContent=title;
+  document.getElementById('modal-body').innerHTML=body;
+  document.getElementById('modal-overlay').style.display='flex';
+}
+window.closeModal=function(e){if(e.target===document.getElementById('modal-overlay'))closeModalDirect();}
+window.closeModalDirect=function(){document.getElementById('modal-overlay').style.display='none';}
+
+// ── START ─────────────────────────────────────────────────
+try {
+  init();
+} catch(e) {
+  document.body.innerHTML = `<div style="font-family:sans-serif;padding:40px;max-width:600px;margin:0 auto;">
+    <h2 style="color:#991B1B;">Portal failed to start</h2>
+    <p style="margin:12px 0;color:#666;">${e.message}</p>
+    <button onclick="location.reload()" style="margin-top:16px;padding:8px 16px;background:#0f3460;color:#fff;border:none;border-radius:6px;cursor:pointer;">Retry</button>
+  </div>`;
+}
+</script>
+</body>
+</html>
+
