@@ -627,6 +627,7 @@ function populateDropdowns(){
 
 // NAVIGATION
 const P={};
+window.P=P; // Expose immediately so inline onclick handlers always work
 P.showPage=function(page){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   const pg=document.getElementById('page-'+page);
@@ -1612,17 +1613,12 @@ P.showAutoRoute=async function(dateStr){
   const allDels=deliveries.filter(d=>d.date===dateStr);
   const fmtd=new Date(dateStr+'T00:00:00').toLocaleDateString([],{weekday:'long',month:'long',day:'numeric',year:'numeric'});
   if(!allDels.length){toast('No deliveries for this date','#991B1B');return;}
-  if(!settings.routeXLUser||!settings.routeXLPass){
-    panel.style.display='block';
-    panel.innerHTML=`<div class="form-card" style="border-color:#FCD34D;">
-      <div style="font-weight:600;margin-bottom:8px;">⚠ RouteXL credentials required</div>
-      <p style="font-size:13px;color:#666;">Go to <strong>Settings → RouteXL credentials</strong> and enter your username and password first.</p>
-    </div>`;
-    return;
-  }
+  const hasRouteXL=!!(settings.routeXLUser&&settings.routeXLPass);
   panel.style.display='block';
-  panel.innerHTML=`<div class="form-card"><div style="font-size:14px;font-weight:600;margin-bottom:4px;">🗺 Auto-Route — ${fmtd}</div>
-    <div style="font-size:13px;color:#666;margin-bottom:14px;">${allDels.length} deliveries · Geocoding addresses and optimizing routes...</div>
+  panel.innerHTML=`<div class="form-card">
+    <div style="font-size:14px;font-weight:600;margin-bottom:4px;">🗺 Auto-Route — ${fmtd}</div>
+    <div style="font-size:13px;color:#666;margin-bottom:4px;">${allDels.length} deliveries · Geocoding and clustering stops...</div>
+    ${!hasRouteXL?`<div style="font-size:12px;color:#B45309;margin-bottom:10px;">⚠ No RouteXL credentials — using geographic clustering only. Add credentials in Settings for optimized driving order.</div>`:''}
     <div id="ar-progress" style="font-size:12px;color:#1E40AF;">⟳ Starting...</div>
   </div>`;
 
@@ -1724,43 +1720,47 @@ P.runAutoRoute=async function(){
   const btn=document.getElementById('ar-optimize-btn');
   if(!result||!btn)return;
   btn.textContent='⟳ Optimizing...';btn.disabled=true;
+  const hasRouteXL=!!(settings.routeXLUser&&settings.routeXLPass);
   // Step 1: K-means cluster by geography + weight
   const clusters=kMeansCluster(stops,n);
-  result.innerHTML='<div style="font-size:12px;color:#1E40AF;">⟳ Sending to RouteXL...</div>';
-  // Step 2: RouteXL optimize each cluster
+  result.innerHTML=`<div style="font-size:12px;color:#1E40AF;">⟳ ${hasRouteXL?'Sending to RouteXL...':'Clustering stops geographically...'}</div>`;
   const truckNames=settings.trucks.slice(0,n);
   const optimizedClusters=[];
   for(let i=0;i<clusters.length;i++){
     const cluster=clusters[i];
     if(!cluster.length)continue;
-    result.innerHTML=`<div style="font-size:12px;color:#1E40AF;">⟳ Optimizing ${truckNames[i]}'s route (${cluster.length} stops)...</div>`;
-    const opt=await optimizeWithRouteXL(cluster,settings.routeXLUser,settings.routeXLPass);
-    optimizedClusters.push({truck:truckNames[i],stops:opt.orderedStops,success:opt.success});
+    if(hasRouteXL){
+      result.innerHTML=`<div style="font-size:12px;color:#1E40AF;">⟳ Optimizing ${truckNames[i]}'s route (${cluster.length} stops)...</div>`;
+      const opt=await optimizeWithRouteXL(cluster,settings.routeXLUser,settings.routeXLPass);
+      optimizedClusters.push({truck:truckNames[i],stops:opt.orderedStops,success:opt.success});
+    } else {
+      optimizedClusters.push({truck:truckNames[i],stops:cluster,success:false});
+    }
   }
-  // Step 3: Show result with confirm button
   const colors=['#DBEAFE','#D1FAE5','#FEF3C7'];
   const textColors=['#1E40AF','#065F46','#92400E'];
   result.innerHTML=`
-    <div style="font-weight:600;font-size:14px;margin-bottom:12px;">✓ Routes optimized — review and confirm</div>
+    <div style="font-weight:600;font-size:14px;margin-bottom:12px;">✓ Routes clustered — review and confirm</div>
+    ${!hasRouteXL?`<div style="font-size:12px;color:#B45309;margin-bottom:10px;padding:8px 12px;background:#FFF7ED;border-radius:6px;">Stops split by geography. Add RouteXL credentials in Settings for optimized driving order within each route.</div>`:''}
     ${optimizedClusters.map((c,i)=>{
       const mapsLink=buildGoogleMapsLink(`${WAREHOUSE_LAT},${WAREHOUSE_LNG}`,c.stops);
+      const totalWeight=c.stops.reduce((a,s)=>a+Number(s.weight||0),0);
       return `<div style="background:${colors[i]};border-radius:8px;padding:12px 14px;margin-bottom:10px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <span style="font-weight:600;color:${textColors[i]};">🚛 ${c.truck} — ${c.stops.length} stops</span>
-          <a href="${mapsLink}" target="_blank" style="font-size:11px;color:${textColors[i]};font-weight:500;">📍 Preview in Maps</a>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
+          <span style="font-weight:600;color:${textColors[i]};">🚛 ${c.truck} — ${c.stops.length} stops · ${totalWeight.toLocaleString()} lbs</span>
+          <a href="${mapsLink}" target="_blank" style="font-size:11px;color:${textColors[i]};font-weight:500;background:rgba(0,0,0,0.08);padding:4px 10px;border-radius:4px;text-decoration:none;">📍 Preview in Maps</a>
         </div>
-        <div style="font-size:12px;color:${textColors[i]};">
-          ${c.stops.map((s,j)=>`<span style="margin-right:8px;">${j+1}. ${s.customer||s.so}</span>`).join('')}
+        <div style="font-size:12px;color:${textColors[i]};line-height:1.8;">
+          ${c.stops.map((s,j)=>`<span style="margin-right:10px;">${j+1}. ${s.customer||s.so} (${s.city||''})</span>`).join('')}
         </div>
-        ${!c.success?`<div style="font-size:11px;color:#B45309;margin-top:4px;">⚠ RouteXL unavailable — using geographic clustering only</div>`:''}
       </div>`;
     }).join('')}
-    <div style="display:flex;gap:8px;margin-top:14px;">
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
       <button class="btn btn-success" onclick="P.confirmAutoRoute(${JSON.stringify(optimizedClusters.map(c=>({truck:c.truck,docIds:c.stops.map(s=>s.docId)})))})">✓ Confirm & Assign Trucks</button>
-      <button class="btn" onclick="P.runAutoRoute()">⟳ Re-optimize</button>
+      <button class="btn" onclick="P.runAutoRoute()">⟳ Re-cluster</button>
       <button class="btn" onclick="document.getElementById('auto-route-panel').style.display='none'">Cancel</button>
     </div>`;
-  btn.textContent='⟳ Optimize with RouteXL';btn.disabled=false;
+  btn.textContent='⟳ Optimize';btn.disabled=false;
 };
 
 P.confirmAutoRoute=async function(assignments){
