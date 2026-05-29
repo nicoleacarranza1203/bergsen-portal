@@ -5,6 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bergsen Portal</title>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAav7nvKb66DTyNqcbl4HK0JmJ9PCrKBKU&libraries=places"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:system-ui,-apple-system,sans-serif;background:#f0f2f5;color:#1a1a1a;font-size:14px;min-height:100vh;}
@@ -359,6 +360,29 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:#0f3460;}
       <!-- SETTINGS -->
       <div id="page-settings" class="page">
         <div class="section-header"><h2>Settings</h2><p>Manage team, carriers, trucks, and password</p></div>
+
+        <div class="settings-sec">
+          <div class="settings-title">🏭 Warehouse origin address</div>
+          <p style="font-size:12px;color:#666;margin-bottom:10px;">All BT routes start from this address each day.</p>
+          <div class="form-grid">
+            <div class="s2"><label class="fl">Street address</label><input id="wh-street" placeholder="e.g. 123 Industrial Blvd, City, CA 90000" oninput="P.saveWarehouseAddress()"></div>
+          </div>
+          <div id="wh-msg" style="font-size:12px;margin-top:6px;color:#065F46;min-height:14px;"></div>
+        </div>
+
+        <div class="settings-sec">
+          <div class="settings-title">📍 Customer address book</div>
+          <p style="font-size:12px;color:#666;margin-bottom:10px;">Add customer addresses as they come up. Used for BT route optimization.</p>
+          <input id="cust-search" placeholder="🔍 Search customers..." style="max-width:260px;margin-bottom:10px;" oninput="P.renderAddressBook()">
+          <div id="address-book-list"></div>
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:flex-end;">
+            <div><label class="fl">Customer name</label><input id="new-cust-name" placeholder="Customer name" style="max-width:200px;"></div>
+            <div><label class="fl">Full address</label><input id="new-cust-addr" placeholder="Street, City, State ZIP" style="max-width:300px;"></div>
+            <button class="btn btn-primary" id="btn-add-customer">Add Customer</button>
+          </div>
+          <div id="cust-msg" style="font-size:12px;margin-top:6px;min-height:14px;"></div>
+        </div>
+
         <div class="settings-sec">
           <div class="settings-title">Salespersons & emails</div>
           <div id="sp-list"></div>
@@ -442,7 +466,7 @@ const sawJobsRef=collection(db,'jobs');// shared with saw app
 
 // STATE
 let orders=[],shipments=[],deliveries=[],tasks=[];
-let settings={passwordHash:null,sps:[
+let settings={passwordHash:null,warehouseAddress:'',customers:[],sps:[
   {init:'NC',email:'nicolec@bergsen.com'},{init:'HM',email:'hollim@bergsen.com'},
   {init:'MT',email:'miket@bergsen.com'},{init:'TD',email:'tomd@bergsen.com'},
   {init:'MR',email:'mrim@bergsen.com'},{init:'IC',email:'israelc@bergsen.com'},
@@ -527,6 +551,21 @@ function showPortal(){
   document.getElementById('cal-export-date').addEventListener('change',function(){P.renderDaySummary(this.value);});
   document.getElementById('btn-export-day').onclick=()=>{const d=document.getElementById('cal-export-date').value;if(d)P.exportDay(d);else toast('Please select a date first','#991B1B');};
   document.getElementById('btn-new-task').onclick=openNewTask;
+  document.getElementById('btn-add-customer').onclick=async function(){
+    const name=document.getElementById('new-cust-name').value.trim();
+    const addr=document.getElementById('new-cust-addr').value.trim();
+    const msg=document.getElementById('cust-msg');
+    if(!name||!addr){msg.style.color='#991B1B';msg.textContent='Both name and address required.';return;}
+    if(!settings.customers)settings.customers=[];
+    if(settings.customers.find(c=>c.name.toLowerCase()===name.toLowerCase())){msg.style.color='#991B1B';msg.textContent='Customer already exists.';return;}
+    settings.customers.push({name,address:addr});
+    await saveSettings();
+    document.getElementById('new-cust-name').value='';
+    document.getElementById('new-cust-addr').value='';
+    msg.style.color='#065F46';msg.textContent=`✓ ${name} added!`;
+    setTimeout(()=>msg.textContent='',2000);
+    P.renderAddressBook();
+  };
   document.getElementById('btn-add-sp').onclick=addSP;
   document.getElementById('btn-add-carrier').onclick=addCarrier;
   document.getElementById('btn-add-truck').onclick=addTruck;
@@ -957,11 +996,12 @@ P.addDelivery=function(date){
   openModal('Add BT Delivery',`
     <div class="form-grid">
       <div><label class="fl">SO #</label><input id="nd-so"></div>
-      <div><label class="fl">Customer</label><input id="nd-customer"></div>
+      <div><label class="fl">Customer</label><input id="nd-customer" oninput="P.suggestAddress('nd-customer','nd-address')"></div>
       <div><label class="fl">Assign Truck</label><select id="nd-truck">${truckOpts()}</select></div>
       <div><label class="fl">Delivery Date</label><input type="date" id="nd-date" value="${date||''}"></div>
       <div><label class="fl">City</label><input id="nd-city"></div>
       <div><label class="fl">Weight (lbs)</label><input type="number" id="nd-weight"></div>
+      <div class="s2"><label class="fl">Full Address <span style="color:#999;font-weight:400;">(auto-filled if in address book)</span></label><input id="nd-address" placeholder="Street, City, State ZIP — used for Google Maps routing"></div>
       <div><label class="fl">Drop Ship?</label><select id="nd-ds"><option value="No">No</option><option value="Yes">Yes</option></select></div>
       <div><label class="fl">Drop Ship Company</label><input id="nd-dsco" placeholder="If drop ship"></div>
       <div class="s2"><label class="fl">Notes</label><input id="nd-notes" placeholder='e.g. Driver to pick up check, call ahead, etc.'></div>
@@ -972,8 +1012,18 @@ P.saveDelivery=async function(){
   const so=document.getElementById('nd-so').value.trim();const customer=document.getElementById('nd-customer').value.trim();
   if(!so||!customer){toast('SO# and Customer required','#991B1B');return;}
   const ds=document.getElementById('nd-ds').value;const dsCo=document.getElementById('nd-dsco').value.trim();
-  await addDoc(deliveriesRef,{id:uid(),so,customer,truck:document.getElementById('nd-truck').value,date:document.getElementById('nd-date').value,city:document.getElementById('nd-city').value.trim(),weight:document.getElementById('nd-weight').value,dropShip:ds,dropShipCompany:dsCo,notes:document.getElementById('nd-notes').value.trim(),status:'Scheduled',added:Date.now()});
-  toast('Delivery added!');closeModal();renderCal();
+  const addr=document.getElementById('nd-address').value.trim();
+  await addDoc(deliveriesRef,{id:uid(),so,customer,truck:document.getElementById('nd-truck').value,date:document.getElementById('nd-date').value,city:document.getElementById('nd-city').value.trim(),address:addr,weight:document.getElementById('nd-weight').value,dropShip:ds,dropShipCompany:dsCo,notes:document.getElementById('nd-notes').value.trim(),status:'Scheduled',added:Date.now()});
+  // Auto-save new address to address book if not already there
+  if(addr&&customer&&!(settings.customers||[]).find(c=>c.name.toLowerCase()===customer.toLowerCase())){
+    if(!settings.customers)settings.customers=[];
+    settings.customers.push({name:customer,address:addr});
+    await saveSettings();
+    toast('Delivery added + customer saved to address book!');
+  } else {
+    toast('Delivery added!');
+  }
+  closeModal();renderCal();
 };
 P.editDelivery=function(docId){
   const d=deliveries.find(d=>d.docId===docId);if(!d)return;
@@ -1069,60 +1119,85 @@ P.renderDaySummary=function(dateStr){
     </div>`;
 };
 
-P.exportDay=function(dateStr){
+P.exportDay=async function(dateStr){
   const dayDels=deliveries.filter(d=>d.date===dateStr);
   if(!dayDels.length){toast('No deliveries for this date','#991B1B');return;}
   const unassigned=dayDels.filter(d=>d.truck==='Unassigned');
   if(unassigned.length>0){toast(`${unassigned.length} deliveries still unassigned!`,'#991B1B');return;}
   const fmtd=new Date(dateStr+'T00:00:00').toLocaleDateString([],{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-  // Group by truck
+  const origin=settings.warehouseAddress||'';
   const byTruck={};
-  dayDels.forEach(d=>{if(!byTruck[d.truck])byTruck[d.truck]=[];byTruck[d.truck].push(d);});
-  // Build printable HTML
+  dayDels.forEach(d=>{
+    if(!byTruck[d.truck])byTruck[d.truck]=[];
+    const addr=d.address||findCustomerAddress(d.customer)||(d.city?`${d.city}, CA`:'');
+    byTruck[d.truck].push({...d,resolvedAddress:addr});
+  });
+  toast('Building route sheet...','#1E40AF');
+  // Build Google Maps links per truck (optimization via waypoints)
+  const truckRoutes={};
+  for(const [truck,stops] of Object.entries(byTruck)){
+    const mapsLink=buildGoogleMapsLink(origin||stops[0]?.resolvedAddress,origin?stops:stops.slice(1));
+    truckRoutes[truck]={stops,mapsLink,totalWeight:stops.reduce((a,d)=>a+Number(d.weight||0),0)};
+  }
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>BT Route Sheet — ${fmtd}</title>
   <style>
     body{font-family:system-ui,sans-serif;padding:32px;color:#1a1a1a;font-size:13px;}
-    h1{font-size:20px;font-weight:700;margin-bottom:4px;}
-    .sub{color:#666;font-size:13px;margin-bottom:24px;}
-    .truck-section{margin-bottom:28px;page-break-inside:avoid;}
-    .truck-header{font-size:15px;font-weight:700;padding:8px 14px;border-radius:6px;margin-bottom:10px;display:inline-block;}
-    .gus{background:#DBEAFE;color:#1E40AF;}
-    .jc{background:#D1FAE5;color:#065F46;}
-    .sergio{background:#FEF3C7;color:#92400E;}
+    h1{font-size:22px;font-weight:700;margin-bottom:4px;}
+    .sub{color:#666;font-size:13px;margin-bottom:8px;}
+    .origin{background:#f0f2f5;border-radius:6px;padding:8px 12px;font-size:12px;margin-bottom:20px;display:inline-block;}
+    .truck-section{margin-bottom:28px;border:1px solid #e5e5e5;border-radius:8px;overflow:hidden;page-break-inside:avoid;}
+    .truck-header{padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+    .truck-header a{font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;text-decoration:none;display:inline-block;}
+    .gus{background:#DBEAFE;color:#1E40AF;}.gus a{background:#1E40AF;color:#fff;}
+    .jc{background:#D1FAE5;color:#065F46;}.jc a{background:#065F46;color:#fff;}
+    .sergio{background:#FEF3C7;color:#92400E;}.sergio a{background:#92400E;color:#fff;}
+    .truck-name{font-size:15px;font-weight:700;}
     table{width:100%;border-collapse:collapse;font-size:12px;}
-    th{text-align:left;padding:7px 10px;border-bottom:2px solid #e5e5e5;font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.5px;}
-    td{padding:8px 10px;border-bottom:1px solid #f0f0f0;}
-    .stop-num{color:#999;font-weight:500;}
-    .footer{margin-top:32px;font-size:11px;color:#999;border-top:1px solid #e5e5e5;padding-top:12px;}
-    @media print{body{padding:16px;}@page{margin:1.5cm;}}
+    th{text-align:left;padding:8px 12px;border-bottom:2px solid #e5e5e5;font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.4px;background:#fafafa;}
+    td{padding:10px 12px;border-bottom:1px solid #f0f0f0;vertical-align:top;}
+    .stop-num{color:#999;font-weight:700;font-size:15px;text-align:center;}
+    .addr{font-size:11px;color:#666;margin-top:3px;}
+    .notes-cell{color:#C2410C;font-weight:600;}
+    .sig{border-bottom:1px solid #bbb;min-width:100px;height:28px;}
+    .footer{margin-top:24px;font-size:11px;color:#999;border-top:1px solid #e5e5e5;padding-top:10px;display:flex;justify-content:space-between;}
+    @media print{.truck-header a{display:none;}body{padding:16px;}@page{margin:1.5cm;}}
   </style></head><body>
   <h1>🚛 BT Route Sheet</h1>
-  <div class="sub">${fmtd} &nbsp;·&nbsp; ${dayDels.length} total deliveries &nbsp;·&nbsp; ${dayDels.reduce((a,d)=>a+Number(d.weight||0),0).toLocaleString()} lbs total</div>
-  ${Object.entries(byTruck).map(([truck,dels])=>`
+  <div class="sub">${fmtd} &nbsp;·&nbsp; ${dayDels.length} total stops &nbsp;·&nbsp; ${dayDels.reduce((a,d)=>a+Number(d.weight||0),0).toLocaleString()} lbs total</div>
+  ${origin?`<div class="origin">📍 Origin: <strong>${origin}</strong></div>`:''}
+  ${Object.entries(truckRoutes).map(([truck,{stops,mapsLink,totalWeight}])=>`
     <div class="truck-section">
-      <div class="truck-header ${truck.toLowerCase()}">${truck} — ${dels.length} stop${dels.length!==1?'s':''} · ${dels.reduce((a,d)=>a+Number(d.weight||0),0).toLocaleString()} lbs</div>
+      <div class="truck-header ${truck.toLowerCase()}">
+        <div>
+          <div class="truck-name">🚛 ${truck}</div>
+          <div style="font-size:12px;margin-top:2px;">${stops.length} stop${stops.length!==1?'s':''} &nbsp;·&nbsp; ${totalWeight.toLocaleString()} lbs</div>
+        </div>
+        <a href="${mapsLink}" target="_blank">📍 Open in Google Maps →</a>
+      </div>
       <table>
-        <thead><tr><th>#</th><th>SO / PO #</th><th>Customer</th><th>City</th><th>Weight</th><th>Drop Ship</th><th>Notes</th></tr></thead>
+        <thead><tr><th style="width:40px;">#</th><th>SO / PO #</th><th>Customer</th><th>Address</th><th>Weight</th><th>Notes</th><th>Signature</th></tr></thead>
         <tbody>
-          ${dels.map((d,i)=>`<tr>
+          ${stops.map((d,i)=>`<tr>
             <td class="stop-num">${i+1}</td>
             <td><strong>${d.so||'—'}</strong></td>
-            <td>${d.customer||'—'}</td>
-            <td>${d.city||'—'}</td>
+            <td>${d.customer||'—'}${d.dropShip==='Yes'?`<br><span style="font-size:11px;color:#6B21A8;">Drop ship: ${d.dropShipCompany||''}</span>`:''}</td>
+            <td><div>${d.city||'—'}</div>${d.resolvedAddress&&d.resolvedAddress!==d.city?`<div class="addr">${d.resolvedAddress}</div>`:''}</td>
             <td>${d.weight?Number(d.weight).toLocaleString()+' lbs':'—'}</td>
-            <td>${d.dropShip==='Yes'?`Drop ship: ${d.dropShipCompany||''}`:''}</td>
-            <td style="${d.notes?'color:#C2410C;font-weight:500;':'color:#999;'}">${d.notes||''}</td>
+            <td class="${d.notes?'notes-cell':''}">${d.notes||''}</td>
+            <td><div class="sig"></div></td>
           </tr>`).join('')}
         </tbody>
       </table>
     </div>`).join('')}
-  <div class="footer">Bergsen Portal · Generated ${new Date().toLocaleString()} · BT Route Sheet for ${fmtd}</div>
+  <div class="footer">
+    <span>Bergsen Portal · BT Route Sheet · ${fmtd}</span>
+    <span>Generated: ${new Date().toLocaleString()}</span>
+  </div>
   </body></html>`;
-  // Open in new tab for printing/saving
   const win=window.open('','_blank');
   win.document.write(html);
   win.document.close();
-  setTimeout(()=>win.print(),500);
+  setTimeout(()=>win.print(),600);
 };
 
 // TASKS
@@ -1243,8 +1318,96 @@ function renderActivity(){
     </div>`).join('')||'<div class="empty">No data</div>';
 }
 
+// Auto-suggest address from address book when typing customer name
+P.suggestAddress=function(custFieldId,addrFieldId){
+  const name=document.getElementById(custFieldId)?.value.trim();
+  const addrField=document.getElementById(addrFieldId);
+  if(!name||!addrField)return;
+  const match=findCustomerAddress(name);
+  if(match&&!addrField.value){
+    addrField.value=match;
+    addrField.style.background='#F0FDF4';
+    setTimeout(()=>addrField.style.background='',2000);
+  }
+};
+
+// ── ADDRESS BOOK ──────────────────────────────────────────
+P.saveWarehouseAddress=async function(){
+  const addr=document.getElementById('wh-street')?.value.trim();
+  if(addr===undefined)return;
+  settings.warehouseAddress=addr;
+  await saveSettings();
+  const msg=document.getElementById('wh-msg');
+  if(msg){msg.textContent='✓ Saved';setTimeout(()=>msg.textContent='',2000);}
+};
+
+P.renderAddressBook=function(){
+  const search=(document.getElementById('cust-search')?.value||'').toLowerCase();
+  const el=document.getElementById('address-book-list');if(!el)return;
+  const filtered=(settings.customers||[]).filter(c=>!search||c.name.toLowerCase().includes(search)||c.address.toLowerCase().includes(search));
+  if(!filtered.length){el.innerHTML=`<div style="font-size:12px;color:#999;padding:8px 0;">${search?'No customers match':'No customers yet — add them below as they come up'}</div>`;return;}
+  el.innerHTML=filtered.map((c,i)=>`
+    <div class="srow">
+      <div style="flex:1;">
+        <span style="font-weight:500;font-size:13px;">${c.name}</span>
+        <span style="font-size:12px;color:#666;margin-left:10px;">📍 ${c.address}</span>
+      </div>
+      <button class="btn btn-danger" style="font-size:11px;padding:2px 8px;" onclick="P.removeCustomer(${i})">Remove</button>
+    </div>`).join('');
+};
+
+P.removeCustomer=async function(i){
+  settings.customers.splice(i,1);
+  await saveSettings();P.renderAddressBook();
+};
+
+function findCustomerAddress(name){
+  if(!name||!settings.customers)return null;
+  const match=settings.customers.find(c=>c.name.toLowerCase()===name.toLowerCase()||name.toLowerCase().includes(c.name.toLowerCase()));
+  return match?match.address:null;
+}
+
+// ── GOOGLE MAPS ROUTING ───────────────────────────────────
+const MAPS_KEY='AIzaSyAav7nvKb66DTyNqcbl4HK0JmJ9PCrKBKU';
+
+async function optimizeRoute(origin,stops){
+  // Use Google Maps Directions API with waypoints optimize
+  if(!stops.length)return{orderedStops:stops,totalDuration:'',totalDistance:''};
+  const waypoints=stops.slice(0,-1).map(s=>`via:${encodeURIComponent(s.address||s.city)}`).join('|');
+  const destination=encodeURIComponent(stops[stops.length-1].address||stops[stops.length-1].city);
+  const url=`https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${destination}&waypoints=optimize:true|${stops.map(s=>encodeURIComponent(s.address||s.city+', CA')).join('|')}&key=${MAPS_KEY}`;
+  try{
+    const res=await fetch(`https://cors-anywhere.herokuapp.com/${url}`);
+    const data=await res.json();
+    if(data.status==='OK'&&data.routes[0]){
+      const order=data.routes[0].waypoint_order;
+      const orderedStops=order.map(i=>stops[i]);
+      const legs=data.routes[0].legs;
+      const totalSecs=legs.reduce((a,l)=>a+l.duration.value,0);
+      const totalMeters=legs.reduce((a,l)=>a+l.distance.value,0);
+      const totalDuration=Math.round(totalSecs/60)+' min';
+      const totalDistance=(totalMeters/1609.34).toFixed(1)+' mi';
+      return{orderedStops,totalDuration,totalDistance};
+    }
+  }catch(e){console.log('Route optimization unavailable, using manual order');}
+  return{orderedStops:stops,totalDuration:'',totalDistance:''};
+}
+
+function buildGoogleMapsLink(origin,stops){
+  const base='https://www.google.com/maps/dir/';
+  const points=[encodeURIComponent(origin),...stops.map(s=>encodeURIComponent(s.address||s.city))].join('/');
+  return base+points;
+}
+// ── END ROUTING ───────────────────────────────────────────
+
 // SETTINGS
 function renderSettingsLists(){
+  // Warehouse address
+  const whEl=document.getElementById('wh-street');
+  if(whEl&&settings.warehouseAddress)whEl.value=settings.warehouseAddress;
+  // Address book
+  P.renderAddressBook();
+  // SPs
   document.getElementById('sp-list').innerHTML=settings.sps.map((s,i)=>`
     <div class="srow">
       <span style="font-weight:500;min-width:40px;">${s.init}</span>
