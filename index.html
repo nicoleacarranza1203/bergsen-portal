@@ -499,8 +499,13 @@ function showPortal(){
   document.getElementById('portal').classList.add('active');
   document.getElementById('topbar-date').textContent=new Date().toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
   const h=new Date().getHours();
-  document.getElementById('home-greet').textContent=(h<12?'Good morning':'h<17?Good afternoon':'Good evening')+' 👋';
+  document.getElementById('home-greet').textContent=(h<12?'Good morning':h<17?'Good afternoon':'Good evening')+' 👋';
   document.getElementById('home-date-sub').textContent=new Date().toLocaleDateString([],{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  // Wire up order entry routing listeners now that elements exist
+  document.getElementById('oe-via').onchange=checkRouting;
+  document.getElementById('oe-cutting').onchange=checkRouting;
+  document.getElementById('oe-ship').onchange=checkRouting;
+  document.getElementById('oe-dropship').addEventListener('change',checkRouting);
   populateDropdowns();
   // Realtime listeners
   onSnapshot(query(ordersRef,orderBy('added','desc')),snap=>{orders=snap.docs.map(d=>({...d.data(),docId:d.id}));renderAll();});
@@ -589,10 +594,7 @@ function checkRouting(){
   const dswrap=document.getElementById('oe-dropship-wrap');
   if(dswrap)dswrap.style.display=ds==='Yes'?'block':'none';
 }
-document.getElementById('oe-via').onchange=checkRouting;
-document.getElementById('oe-cutting').onchange=checkRouting;
-document.getElementById('oe-ship').onchange=checkRouting;
-document.getElementById('oe-dropship').addEventListener('change',checkRouting);
+// ORDER ENTRY ROUTING — listeners attached in showPortal()
 
 // SUBMIT ORDER
 document.getElementById('submit-order-btn').onclick=async function(){
