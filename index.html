@@ -1224,6 +1224,8 @@ P.importDayToAddressBook=async function(dateStr){
   await saveSettings();
   toast(`✓ ${added} customer${added>1?'s':''} added to address book! Go to Settings to geocode them.`);
 };
+
+P.saveDeliveryAddr=async function(docId,dateStr){
   const input=document.getElementById('addr-input-'+docId);
   if(!input)return;
   const address=input.value.trim();
@@ -1829,6 +1831,8 @@ P.geocodeAll=async function(){
   toast(`✓ Geocoded ${count} of ${missing.length} customers!`);
   P.renderAddressBook();
 };
+
+P.removeCustomer=async function(i){
   settings.customers.splice(i,1);
   await saveSettings();P.renderAddressBook();
 };
