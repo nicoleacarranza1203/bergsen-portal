@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bergsen Portal</title>
-<script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAav7nvKb66DTyNqcbl4HK0JmJ9PCrKBKU&libraries=places"></script>
+<script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAav7nvKb66DTyNqcbl4HK0JmJ9PCrKBKU&libraries=places,geocoding"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:system-ui,-apple-system,sans-serif;background:#f0f2f5;color:#1a1a1a;font-size:14px;min-height:100vh;}
@@ -1446,17 +1446,26 @@ const WAREHOUSE_LAT=33.93665410552897;
 const WAREHOUSE_LNG=-118.07065790350524;
 
 async function geocodeAddress(address){
-  try{
-    const url=`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${MAPS_KEY}`;
-    const res=await fetch(url);
-    if(!res.ok)return null;
-    const data=await res.json();
-    if(data.status==='OK'&&data.results[0]){
-      const loc=data.results[0].geometry.location;
-      return{lat:loc.lat,lng:loc.lng,formattedAddress:data.results[0].formatted_address};
+  return new Promise((resolve)=>{
+    try{
+      if(typeof google==='undefined'||!google.maps||!google.maps.Geocoder){
+        console.warn('Google Maps not loaded yet');resolve(null);return;
+      }
+      const geocoder=new google.maps.Geocoder();
+      geocoder.geocode({address},(results,status)=>{
+        if(status==='OK'&&results[0]){
+          const loc=results[0].geometry.location;
+          resolve({lat:loc.lat(),lng:loc.lng(),formattedAddress:results[0].formatted_address});
+        } else {
+          console.warn('Geocode failed:',status);
+          resolve(null);
+        }
+      });
+    }catch(e){
+      console.error('Geocode error:',e);
+      resolve(null);
     }
-  }catch(e){console.error('Geocode failed:',e);}
-  return null;
+  });
 }
 
 // ── K-MEANS CLUSTERING ────────────────────────────────────
